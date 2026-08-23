@@ -64,7 +64,7 @@ export default function App() {
   });
 
   // Portal view state & Modal state
-  const [portalView, setPortalViewState] = useState<'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard'>('selection');
+  const [portalView, setPortalViewState] = useState<'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard' | 'admin-login'>('selection');
   const [showAgeModal, setShowAgeModalState] = useState<boolean>(false);
   const [principalSession, setPrincipalSession] = useState<{
     schoolCode: string;
@@ -76,14 +76,14 @@ export default function App() {
   // Navigation History Stack
   type NavState = {
     userRole: 'portal' | 'parent' | 'admin';
-    portalView: 'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard';
+    portalView: 'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard' | 'admin-login';
     showAgeModal: boolean;
   };
   const historyStackRef = useRef<NavState[]>([]);
 
   const pushNavState = (
     newRole: 'portal' | 'parent' | 'admin',
-    newPortalView: 'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard' = portalView,
+    newPortalView: 'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard' | 'admin-login' = portalView,
     newAgeModal: boolean = false
   ) => {
     const currentState: NavState = { userRole, portalView, showAgeModal };
@@ -106,7 +106,7 @@ export default function App() {
     pushNavState(role, role === 'portal' ? 'selection' : portalView, false);
   };
 
-  const handlePortalViewChange = (newView: 'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard') => {
+  const handlePortalViewChange = (newView: 'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard' | 'admin-login') => {
     pushNavState('portal', newView, false);
   };
 

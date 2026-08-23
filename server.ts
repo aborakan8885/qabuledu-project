@@ -78,8 +78,7 @@ async function startServer() {
     legacyHeaders: false,
     message: "Too many requests from this IP, please try again later.",
     validate: {
-      xForwardedForHeader: false,
-      defaultKeys: false
+      xForwardedForHeader: false
     }
   });
   app.use("/api/", limiter);

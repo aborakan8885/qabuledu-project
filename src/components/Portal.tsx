@@ -9,6 +9,7 @@ import {
   ArrowRight, 
   ArrowLeft, 
   Lock, 
+  LogIn,
   Eye, 
   EyeOff, 
   CheckCircle, 
@@ -41,7 +42,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Language, SurveyResponse, AppConfig, PrincipalReport, SchoolItem } from '../types';
-import { TRANSLATIONS, INITIAL_SCHOOLS } from '../data/mockData';
+import { TRANSLATIONS, INITIAL_SCHOOLS, ADMIN_UNITS, OFFICIAL_ADMINS } from '../data/mockData';
 import { SchoolSelectDropdown } from './SchoolSelectDropdown';
 import { isMatchingPrincipalSchool, getRequestTypeInfo, cleanSchoolName, normalizeArabicText, isSurveyEqualizationRequest, isSurveyTransferRequest } from '../utils/storageEngine';
 
@@ -59,8 +60,8 @@ interface PortalProps {
   onToggleReportResolved?: (id: string) => void;
   theme?: 'light' | 'dark';
   schools?: SchoolItem[];
-  portalView?: 'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard';
-  onPortalViewChange?: (view: 'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard') => void;
+  portalView?: 'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard' | 'admin-login';
+  onPortalViewChange?: (view: 'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard' | 'admin-login') => void;
   showAgeModal?: boolean;
   onAgeModalChange?: (show: boolean) => void;
   principalSession?: {
@@ -114,8 +115,8 @@ export default function Portal({
     return schools || INITIAL_SCHOOLS;
   }, [schools]);
 
-  // Portal view state: 'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard'
-  const [view, setViewInternal] = useState<'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard'>(portalViewProp || 'selection');
+  // Portal view state: 'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard' | 'admin-login'
+  const [view, setViewInternal] = useState<'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard' | 'admin-login'>(portalViewProp || 'selection');
 
   // Age Verification Modal State for Student Grade 1 Admission
   const [showAgeModal, setShowAgeModalInternal] = useState<boolean>(showAgeModalProp || false);
@@ -139,7 +140,7 @@ export default function Portal({
     }
   }, [showAgeModalProp]);
 
-  const setView = (v: 'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard') => {
+  const setView = (v: 'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard' | 'admin-login') => {
     setViewInternal(v);
     if (onPortalViewChange) onPortalViewChange(v);
   };
@@ -197,6 +198,13 @@ export default function Portal({
   const [retrievedSchools, setRetrievedSchools] = useState<any[]>([]);
   const [isRetrieving, setIsRetrieving] = useState(false);
   const [retrievalStatus, setRetrievalStatus] = useState<'idle' | 'success' | 'error'>('idle');
+
+  const [adminAuthMode, setAdminAuthMode] = useState<'login' | 'register'>('login');
+  const [selectedAdminUnit, setSelectedAdminUnit] = useState('');
+  const [isAdminDataConfirmed, setIsAdminDataConfirmed] = useState(false);
+  const [retrievedAdminData, setRetrievedAdminData] = useState<any>(null);
+  const [isAdminRetrieving, setIsAdminRetrieving] = useState(false);
+  const [adminRetrievalStatus, setAdminRetrievalStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   // Principal Session State (lifted or local fallback)
   const [principalSessionInternal, setPrincipalSessionInternal] = useState<{
@@ -955,7 +963,7 @@ export default function Portal({
               {/* Card 4: Department Staff (منسوبي الإدارة) */}
               <motion.div
                 whileHover={{ y: -3, scale: 1.01 }}
-                onClick={() => onSelectRole('admin')}
+                onClick={() => setView('admin-login')}
                 className="group relative rounded-2xl p-5 cursor-pointer transition-all flex flex-col justify-between overflow-hidden shadow-sm border bg-white border-slate-200 hover:border-indigo-500 hover:shadow-lg"
               >
                 {/* Decorative background glow */}
@@ -992,6 +1000,402 @@ export default function Portal({
 
             </div>
           </div>
+        )}
+
+        {/* VIEW: ADMIN LOGIN (منسوبي الإدارة) */}
+        {view === 'admin-login' && (
+          <motion.div
+            key="portal-admin-login"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="my-auto space-y-6 max-w-2xl mx-auto px-4 w-full"
+          >
+            <div className={`p-6 sm:p-8 rounded-3xl shadow-2xl border ${
+              isDark ? 'bg-[#092538] border-indigo-800/40' : 'bg-white border-indigo-100'
+            }`}>
+              {/* Tab Switcher (Login / Register) */}
+              <div className="flex p-1 rounded-xl bg-slate-100 dark:bg-[#0b2336] border dark:border-teal-800/20 mb-8 max-w-xs mx-auto">
+                <button
+                  onClick={() => {
+                    setAdminAuthMode('login');
+                    setLoginError('');
+                  }}
+                  className={`flex-1 py-2 text-[11px] font-black rounded-lg transition-all ${
+                    adminAuthMode === 'login'
+                      ? 'bg-indigo-600 text-white shadow-md'
+                      : 'text-slate-500 dark:text-teal-400 hover:bg-slate-200 dark:hover:bg-teal-900/30'
+                  }`}
+                >
+                  {isRtl ? 'تسجيل دخول' : 'Login'}
+                </button>
+                <button
+                  onClick={() => {
+                    setAdminAuthMode('register');
+                    setLoginError('');
+                  }}
+                  className={`flex-1 py-2 text-[11px] font-black rounded-lg transition-all ${
+                    adminAuthMode === 'register'
+                      ? 'bg-indigo-600 text-white shadow-md'
+                      : 'text-slate-500 dark:text-teal-400 hover:bg-slate-200 dark:hover:bg-teal-900/30'
+                  }`}
+                >
+                  {isRtl ? 'تسجيل جديد' : 'New Registration'}
+                </button>
+              </div>
+
+              <div className="text-center space-y-3 mb-8">
+                <div className="inline-flex p-4 rounded-2xl bg-indigo-600 shadow-lg shadow-indigo-500/20 text-white mb-2">
+                  <ShieldCheck className="w-8 h-8" />
+                </div>
+                <h2 className={`text-2xl font-black ${isDark ? 'text-white' : 'text-slate-800'}`}>
+                  {adminAuthMode === 'login' 
+                    ? (isRtl ? 'بوابة تسجيل دخول منسوبي الإدارة' : 'Department Staff Login')
+                    : (isRtl ? 'تسجيل منسوب جديد في الإدارة' : 'Staff Registration Portal')
+                  }
+                </h2>
+                <p className={`text-sm font-bold ${isDark ? 'text-teal-300' : 'text-slate-500'}`}>
+                  {adminAuthMode === 'login'
+                    ? (isRtl ? 'يرجى إدخال السجل المدني وكلمة السر للمتابعة' : 'Enter your Civil ID and password to continue')
+                    : (isRtl ? 'سجل حسابك كمنسوب إدارة لاستخدام صلاحياتك المخصصة' : 'Register your staff account to access your assigned tools')
+                  }
+                </p>
+              </div>
+
+              {adminAuthMode === 'login' ? (
+                <form
+                  className="space-y-5"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const formData = new FormData(e.currentTarget);
+                    const nationalId = formData.get('nationalId') as string;
+                    const password = formData.get('password') as string;
+
+                    // 1. Check Hardcoded Admin
+                    if (nationalId === '1068575628' && password === 'salim123321rs&1') {
+                      setLoginError('');
+                      localStorage.setItem('officer_authenticated_v1', 'true');
+                      localStorage.setItem('active_officer_id_v1', 'emp_1');
+                      onSelectRole('admin');
+                      return;
+                    }
+
+                    // 2. Check Registered Admins in localStorage
+                    try {
+                      const regAdminsRaw = localStorage.getItem('registered_admins_v1');
+                      if (regAdminsRaw) {
+                        const regAdmins = JSON.parse(regAdminsRaw);
+                        const matchedAdmin = regAdmins.find((a: any) => a.nationalId === nationalId && a.password === password);
+                        if (matchedAdmin) {
+                          setLoginError('');
+                          localStorage.setItem('officer_authenticated_v1', 'true');
+                          localStorage.setItem('active_officer_id_v1', matchedAdmin.id || 'emp_custom');
+                          // In a more complex app, we'd store the whole object
+                          onSelectRole('admin');
+                          return;
+                        }
+                      }
+                    } catch (err) {
+                      console.error('Login parsing error', err);
+                    }
+
+                    setLoginError(isRtl ? 'خطأ في السجل المدني أو كلمة المرور!' : 'Incorrect Civil ID or password!');
+                  }}
+                >
+                  <div className="space-y-1.5">
+                    <label className={`block text-xs font-black ${isDark ? 'text-teal-400' : 'text-slate-700'}`}>
+                      {isRtl ? 'اسم المستخدم / رقم السجل المدني:' : 'Username / Civil ID:'}
+                    </label>
+                    <div className="relative">
+                      <User className="absolute top-3.5 right-3.5 w-4.5 h-4.5 text-slate-400" />
+                      <input
+                        name="nationalId"
+                        type="text"
+                        placeholder={isRtl ? 'أدخل رقم السجل المدني...' : 'Enter Civil ID...'}
+                        className={`w-full pr-11 pl-4 py-3 rounded-xl outline-none border transition-all text-sm font-bold ${
+                          isDark ? 'bg-[#0b2336] border-teal-800/40 text-white focus:border-indigo-400' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'
+                        }`}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className={`block text-xs font-black ${isDark ? 'text-teal-400' : 'text-slate-700'}`}>
+                      {isRtl ? 'كلمة المرور:' : 'Password:'}
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute top-3.5 right-3.5 w-4.5 h-4.5 text-slate-400" />
+                      <input
+                        name="password"
+                        type="password"
+                        placeholder={isRtl ? 'أدخل كلمة السر الخاصة بك...' : 'Enter your password...'}
+                        className={`w-full pr-11 pl-4 py-3 rounded-xl outline-none border transition-all text-sm font-bold ${
+                          isDark ? 'bg-[#0b2336] border-teal-800/40 text-white focus:border-indigo-400' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'
+                        }`}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {loginError && (
+                    <div className="p-3 rounded-xl bg-rose-50 border border-rose-100 text-rose-600 text-[11px] font-black flex items-center gap-2 animate-shake">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>{loginError}</span>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm rounded-xl shadow-lg shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
+                  >
+                    <LogIn className="w-5 h-5" />
+                    <span>{isRtl ? 'تسجيل الدخول للنظام' : 'Sign In to System'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setView('selection')}
+                    className={`w-full py-3 border text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 ${
+                      isDark ? 'border-indigo-800/40 text-indigo-300 hover:bg-indigo-900/20' : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    {isRtl ? 'العودة للاختيار' : 'Back to Selection'}
+                  </button>
+                </form>
+              ) : (
+                /* ADMIN REGISTRATION FORM */
+                <div className="space-y-5">
+                  {/* Step 1: Unit & ID */}
+                  {!isAdminDataConfirmed && (
+                    <>
+                      <div className="space-y-1.5">
+                        <label className={`block text-xs font-black ${isDark ? 'text-teal-400' : 'text-slate-700'}`}>
+                          {isRtl ? '1. اختر الإدارة / القسم / الوحدة التابع لها:' : '1. Select Department / Unit / Section:'}
+                        </label>
+                        <select
+                          value={selectedAdminUnit}
+                          onChange={(e) => setSelectedAdminUnit(e.target.value)}
+                          className={`w-full px-4 py-3 rounded-xl outline-none border transition-all text-sm font-bold appearance-none cursor-pointer ${
+                            isDark ? 'bg-[#0b2336] border-teal-800/40 text-white focus:border-indigo-400' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'
+                          }`}
+                        >
+                          <option value="">{isRtl ? '-- اختر الجهة التابع لها --' : '-- Select Unit --'}</option>
+                          {ADMIN_UNITS.map((unit, idx) => (
+                            <option key={idx} value={unit}>{unit}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className={`block text-xs font-black ${isDark ? 'text-teal-400' : 'text-slate-700'}`}>
+                          {isRtl ? '2. رقم السجل المدني للمنسوب (10 أرقام):' : '2. Staff Civil ID (10 digits):'}
+                        </label>
+                        <input
+                          type="text"
+                          value={enteredCivilId}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                            setEnteredCivilId(val);
+                            setAdminRetrievalStatus('idle');
+                            setLoginError('');
+                          }}
+                          placeholder={isRtl ? 'أدخل رقم السجل المدني...' : 'Enter Civil ID...'}
+                          className={`w-full px-4 py-3 rounded-xl outline-none border transition-all text-sm font-bold ${
+                            isDark ? 'bg-[#0b2336] border-teal-800/40 text-white focus:border-indigo-400' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'
+                          }`}
+                        />
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          if (!selectedAdminUnit || !enteredCivilId || enteredCivilId.length < 10) {
+                            setLoginError(isRtl ? 'يرجى اختيار الجهة وإدخال رقم السجل المدني كاملاً!' : 'Select unit and enter valid Civil ID!');
+                            return;
+                          }
+                          setIsAdminRetrieving(true);
+                          setLoginError('');
+                          setTimeout(() => {
+                            const match = OFFICIAL_ADMINS.find(a => a.nationalId === enteredCivilId); // Simplified match
+                            if (match) {
+                              setRetrievedAdminData(match);
+                              setAdminRetrievalStatus('success');
+                            } else {
+                              setAdminRetrievalStatus('error');
+                              setLoginError(isRtl ? 'لم يتم العثور على بيانات منسوب بهذا السجل في الجهة المختارة.' : 'No staff record found for this ID in selected unit.');
+                            }
+                            setIsAdminRetrieving(false);
+                          }, 1000);
+                        }}
+                        disabled={isAdminRetrieving || !selectedAdminUnit || enteredCivilId.length < 10}
+                        className={`w-full py-3.5 rounded-xl font-black text-sm flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 ${
+                          isAdminRetrieving || !selectedAdminUnit || enteredCivilId.length < 10
+                            ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-50'
+                            : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                        }`}
+                      >
+                        {isAdminRetrieving ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <span>{isRtl ? 'جاري استدعاء البيانات...' : 'Retrieving Data...'}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Database className="w-5 h-5" />
+                            <span>{isRtl ? 'استدعاء بيانات المنسوب' : 'Retrieve Staff Data'}</span>
+                          </>
+                        )}
+                      </button>
+                    </>
+                  )}
+
+                  {/* Step 2: Confirmation */}
+                  {adminRetrievalStatus === 'success' && retrievedAdminData && !isAdminDataConfirmed && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className={`p-5 rounded-2xl border-2 border-indigo-200 dark:border-indigo-800/40 ${isDark ? 'bg-[#092233]' : 'bg-indigo-50/50'} space-y-4`}
+                    >
+                      <div className="flex items-center gap-2 border-b border-indigo-100 dark:border-indigo-800/20 pb-3">
+                        <User className="w-5 h-5 text-indigo-500" />
+                        <span className={`text-sm font-black ${isDark ? 'text-white' : 'text-indigo-900'}`}>
+                          {isRtl ? 'البيانات المسجلة رسمياً في النظام:' : 'Official Data Found:'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3">
+                        <div className="flex justify-between items-center text-[11px] font-bold">
+                          <span className="text-slate-500">{isRtl ? 'اسم المنسوب:' : 'Staff Name:'}</span>
+                          <span className={isDark ? 'text-indigo-300' : 'text-indigo-900'}>{retrievedAdminData.nameAr}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-[11px] font-bold">
+                          <span className="text-slate-500">{isRtl ? 'الجهة / الإدارة:' : 'Unit / Dept:'}</span>
+                          <span className={isDark ? 'text-indigo-300' : 'text-indigo-900'}>{retrievedAdminData.unit}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-[11px] font-bold">
+                          <span className="text-slate-500">{isRtl ? 'الدور الوظيفي:' : 'Functional Role:'}</span>
+                          <span className="px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300">
+                            {retrievedAdminData.roleDesc}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setIsAdminDataConfirmed(true)}
+                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        <span>{isRtl ? 'تأكيد صحة البيانات والبدء في تعيين كلمة السر' : 'Confirm & Set Password'}</span>
+                      </button>
+                    </motion.div>
+                  )}
+
+                  {/* Step 3: Final Password Setup */}
+                  {isAdminDataConfirmed && (
+                    <form
+                      className="space-y-4"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const formData = new FormData(e.currentTarget);
+                        const pwd = formData.get('regPassword') as string;
+                        const confirmPwd = formData.get('confirmPassword') as string;
+
+                        if (pwd !== confirmPwd) {
+                          setLoginError(isRtl ? 'كلمتا المرور غير متطابقتين!' : 'Passwords do not match!');
+                          return;
+                        }
+
+                        // SAVE REGISTRATION
+                        try {
+                          const existingRegsRaw = localStorage.getItem('registered_admins_v1');
+                          const existingRegs = existingRegsRaw ? JSON.parse(existingRegsRaw) : [];
+                          
+                          const newAdmin = {
+                            ...retrievedAdminData,
+                            password: pwd,
+                            registeredAt: new Date().toISOString()
+                          };
+
+                          const filteredRegs = existingRegs.filter((a: any) => a.nationalId !== newAdmin.nationalId);
+                          filteredRegs.push(newAdmin);
+                          localStorage.setItem('registered_admins_v1', JSON.stringify(filteredRegs));
+                          
+                          // Auto Login or Success Feedback
+                          setAdminAuthMode('login');
+                          setAdminRetrievalStatus('idle');
+                          setIsAdminDataConfirmed(false);
+                          setLoginError('');
+                          // Show success alert or toast here if available
+                        } catch (err) {
+                          console.error('Failed to save admin registration', err);
+                        }
+                      }}
+                    >
+                      <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-200 flex items-center justify-between gap-2 text-xs font-black">
+                        <div className="flex items-center gap-1.5">
+                          <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          <span>{isRtl ? '✓ تم تأكيد هويتك كمنسوب رسمي' : '✓ Identity Verified'}</span>
+                        </div>
+                        <button type="button" onClick={() => setIsAdminDataConfirmed(false)} className="text-[10px] underline">{isRtl ? 'تغيير' : 'Change'}</button>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className={`block text-xs font-black ${isDark ? 'text-teal-400' : 'text-slate-700'}`}>
+                          {isRtl ? 'كلمة السر الجديدة:' : 'New Password:'}
+                        </label>
+                        <input
+                          name="regPassword"
+                          type="password"
+                          className={`w-full px-4 py-3 rounded-xl outline-none border transition-all text-sm font-bold ${
+                            isDark ? 'bg-[#0b2336] border-teal-800/40 text-white focus:border-indigo-400' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'
+                          }`}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className={`block text-xs font-black ${isDark ? 'text-teal-400' : 'text-slate-700'}`}>
+                          {isRtl ? 'تأكيد كلمة السر الجديدة:' : 'Confirm New Password:'}
+                        </label>
+                        <input
+                          name="confirmPassword"
+                          type="password"
+                          className={`w-full px-4 py-3 rounded-xl outline-none border transition-all text-sm font-bold ${
+                            isDark ? 'bg-[#0b2336] border-teal-800/40 text-white focus:border-indigo-400' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'
+                          }`}
+                          required
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
+                      >
+                        <ShieldCheck className="w-5 h-5" />
+                        <span>{isRtl ? 'إكمال التسجيل والدخول للنظام' : 'Complete Registration & Sign In'}</span>
+                      </button>
+                    </form>
+                  )}
+
+                  {loginError && (
+                    <div className="p-3 rounded-xl bg-rose-50 border border-rose-100 text-rose-600 text-[11px] font-black flex items-center gap-2 animate-shake">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>{loginError}</span>
+                    </div>
+                  )}
+
+                  {!isAdminDataConfirmed && (
+                    <button
+                      type="button"
+                      onClick={() => setView('selection')}
+                      className={`w-full py-3 border text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 ${
+                        isDark ? 'border-indigo-800/40 text-indigo-300 hover:bg-indigo-900/20' : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      {isRtl ? 'العودة للاختيار' : 'Back to Selection'}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </motion.div>
         )}
 
         {/* VIEW: PARENT CHOICES */}

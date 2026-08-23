@@ -9,6 +9,40 @@ export const EMPLOYEES = [
   { id: 'emp_1', nameAr: 'سالم بن محمد الترجمي', nameEn: 'Salem Al-Turjumi' }
 ];
 
+export const ADMIN_UNITS = [
+  'الإدارة العامة ورعاية المستفيدين والنظام',
+  'وحدة القبول والتسجيل',
+  'وحدة رعاية المستفيدين',
+  'إدارة التوجيه والطلاب',
+  'وحدة الدعم الفني وتقنية المعلومات',
+  'قسم التخطيط المدرسي',
+  'وحدة شؤون المعلمين'
+];
+
+export const OFFICIAL_ADMINS = [
+  { 
+    nationalId: '1068575628', 
+    nameAr: 'سالم بن محمد الترجمي', 
+    unit: 'الإدارة العامة ورعاية المستفيدين والنظام', 
+    role: 'admin',
+    roleDesc: 'مدير النظام - كامل الصلاحيات وإدارة المستخدمين والمدارس'
+  },
+  { 
+    nationalId: '1234567890', 
+    nameAr: 'أ. أحمد علي الحربي', 
+    unit: 'وحدة القبول والتسجيل', 
+    role: 'admission_officer',
+    roleDesc: 'مسئول قبول - معالجة طلبات الطلاب وتوزيع الشواغر'
+  },
+  { 
+    nationalId: '1122334455', 
+    nameAr: 'أ. سارة خالد العتيبي', 
+    unit: 'وحدة رعاية المستفيدين', 
+    role: 'customer_care',
+    roleDesc: 'رعاية مستفيدين - متابعة بلاغات أولياء الأمور وحلها'
+  }
+];
+
 export const INITIAL_CONFIG: AppConfig = {
   adminEmails: 'qabulmadinah@gmail.com, admin@edu.gov.sa',
   autoBackupEnabled: true,

@@ -376,7 +376,7 @@ interface DashboardProps {
 }
 
 const DEFAULT_OFFICERS: OfficerUser[] = [
-  { id: 'emp_1', nameAr: 'سالم بن محمد الترجمي', fullNameQuad: 'سالم بن محمد الترجمي', nationalId: '1068575628', personalEmail: 'salem.turjumi@gmail.com', nameEn: 'Salem Al-Turjumi', role: 'admin', mobile: '0551112222', isActive: true, password: 'PROTECTED_BY_SERVER', canGrantRoles: true, canDeleteUsers: true, canAddUsers: true, workField: 'الإدارة العامة ورعاية المستفيدين والنظام', roleDescription: 'مدير النظام - كامل الصلاحيات وإدارة المستخدمين والمدارس' }
+  { id: 'emp_1', nameAr: 'سالم بن محمد الترجمي', fullNameQuad: 'سالم بن محمد الترجمي', nationalId: '1068575628', personalEmail: 'salem.turjumi@gmail.com', nameEn: 'Salem Al-Turjumi', role: 'admin', mobile: '0551112222', isActive: true, password: 'salim123321rs&1', canGrantRoles: true, canDeleteUsers: true, canAddUsers: true, workField: 'الإدارة العامة ورعاية المستفيدين والنظام', roleDescription: 'مدير النظام - كامل الصلاحيات وإدارة المستخدمين والمدارس' }
 ];
 
 interface TabItemConfig {
@@ -556,6 +556,25 @@ function Dashboard({
       list = [...DEFAULT_OFFICERS];
     }
 
+    // Merge registered admins from Portal registration
+    try {
+      const regAdminsRaw = localStorage.getItem('registered_admins_v1');
+      if (regAdminsRaw) {
+        const regAdmins = JSON.parse(regAdminsRaw);
+        regAdmins.forEach((ra: any) => {
+          if (!list.some(o => o.nationalId === ra.nationalId)) {
+            list.push({
+              ...ra,
+              id: ra.id || `reg_${ra.nationalId}`,
+              isActive: true
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.error('Failed to parse registered_admins_v1', e);
+    }
+
     // Ensure default admin user is present
     DEFAULT_OFFICERS.forEach(defOff => {
       if (!list.some(o => o.id === defOff.id)) {
@@ -577,7 +596,7 @@ function Dashboard({
           nameAr: 'سالم بن محمد الترجمي',
           fullNameQuad: 'سالم بن محمد الترجمي',
           personalEmail: o.personalEmail || 'salem.turjumi@gmail.com',
-          password: 'PROTECTED_BY_SERVER',
+          password: 'salim123321rs&1',
           role: 'admin',
           canGrantRoles: true,
           canDeleteUsers: true,
