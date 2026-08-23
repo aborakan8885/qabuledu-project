@@ -238,17 +238,16 @@ export default function App() {
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       } catch { /* ignore */ }
     }
-    const wasSaved = localStorage.getItem('app_schools_saved_v1');
-    if (wasSaved === 'true') return [];
     return INITIAL_SCHOOLS;
   });
 
   const [isInitialLoaded, setIsInitialLoaded] = useState<boolean>(false);
 
   const handleUpdateSchools = (newList: SchoolItem[]) => {
+    if (!newList || !Array.isArray(newList)) return;
     setSchoolsList(newList);
     saveSchoolsToStorage(newList, { isConfirmedAdminClear: true });
   };
@@ -266,16 +265,27 @@ export default function App() {
       loadSchoolsFromStorage()
     ]).then(([surveysData, reportsData, schoolsData]) => {
       if (surveysData && surveysData.length > 0) {
-        setSurveys(surveysData);
+        setSurveys(prev => {
+          // Merge preserving all requests
+          const merged = new Map<string, SurveyResponse>();
+          prev.forEach(s => { if (s && s.id) merged.set(s.id, s); });
+          surveysData.forEach(s => { if (s && s.id) merged.set(s.id, s); });
+          return Array.from(merged.values());
+        });
       }
       if (reportsData && reportsData.length > 0) {
-        setPrincipalReports(reportsData);
+        setPrincipalReports(prev => {
+          const merged = new Map<string, PrincipalReport>();
+          prev.forEach(r => { if (r && r.id) merged.set(r.id, r); });
+          reportsData.forEach(r => { if (r && r.id) merged.set(r.id, r); });
+          return Array.from(merged.values());
+        });
       }
-      if (schoolsData && Array.isArray(schoolsData)) {
-        const wasSaved = localStorage.getItem('app_schools_saved_v1');
-        if (schoolsData.length > 0 || wasSaved === 'true') {
-          setSchoolsList(schoolsData);
-        }
+      if (schoolsData && Array.isArray(schoolsData) && schoolsData.length > 0) {
+        setSchoolsList(schoolsData);
+      } else {
+        // Guarantee default schools list is preserved
+        setSchoolsList(prev => (prev && prev.length > 0 ? prev : INITIAL_SCHOOLS));
       }
       setIsInitialLoaded(true);
     }).catch(err => {

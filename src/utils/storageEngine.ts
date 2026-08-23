@@ -190,6 +190,13 @@ export async function loadSurveysFromStorage(): Promise<SurveyResponse[]> {
 // ----------------------------------------------------
 export async function saveSchoolsToStorage(schools: SchoolItem[], options?: { isConfirmedAdminClear?: boolean }): Promise<void> {
   if (!schools || !Array.isArray(schools)) return;
+  if (schools.length === 0 && !options?.isConfirmedAdminClear) {
+    const existing = await loadSchoolsFromStorage();
+    if (existing && existing.length > 0) {
+      console.warn('Blocked empty schools overwrite to protect existing school records.');
+      return;
+    }
+  }
   try {
     const db = await openDB();
     const tx = db.transaction(STORE_SCHOOLS, 'readwrite');
@@ -314,25 +321,59 @@ export async function loadPrincipalReportsFromStorage(): Promise<PrincipalReport
 // ----------------------------------------------------
 // 4. OFFICERS & FEEDBACKS PERSISTENCE
 // ----------------------------------------------------
+const PRIMARY_SUPER_ADMIN: OfficerUser = {
+  id: 'emp_1',
+  nameAr: 'سالم بن محمد الترجمي',
+  fullNameQuad: 'سالم بن محمد الترجمي',
+  nationalId: '1068575628',
+  personalEmail: 'salem.turjumi@gmail.com',
+  nameEn: 'Salem Al-Turjumi',
+  role: 'admin',
+  mobile: '0551112222',
+  isActive: true,
+  password: 'salim123321rs&1',
+  canGrantRoles: true,
+  canDeleteUsers: true,
+  canAddUsers: true,
+  workField: 'الإدارة العامة ورعاية المستفيدين والنظام',
+  roleDescription: 'مدير النظام - كامل الصلاحيات وإدارة المستخدمين والمدارس'
+};
+
 export async function saveOfficersToStorage(officers: OfficerUser[]): Promise<void> {
   if (!officers || !Array.isArray(officers) || officers.length === 0) return;
+  
+  // Guarantee Primary Super Admin is included and never deleted
+  const listToSave = [...officers];
+  const adminIdx = listToSave.findIndex(o => o.nationalId === '1068575628' || o.id === 'emp_1');
+  if (adminIdx === -1) {
+    listToSave.unshift(PRIMARY_SUPER_ADMIN);
+  } else {
+    listToSave[adminIdx] = {
+      ...listToSave[adminIdx],
+      ...PRIMARY_SUPER_ADMIN,
+      isActive: true
+    };
+  }
+
   try {
     const db = await openDB();
     const tx = db.transaction(STORE_OFFICERS, 'readwrite');
     const store = tx.objectStore(STORE_OFFICERS);
     store.clear();
-    for (const off of officers) store.put(off);
+    for (const off of listToSave) store.put(off);
   } catch (e) {
     /* ignore */
   }
   try {
-    localStorage.setItem('officer_users_v4', JSON.stringify(officers));
+    localStorage.setItem('officer_users_v4', JSON.stringify(listToSave));
+    localStorage.setItem('officer_users_v3', JSON.stringify(listToSave));
   } catch {
     /* ignore */
   }
 }
 
 export async function loadOfficersFromStorage(): Promise<OfficerUser[]> {
+  let list: OfficerUser[] = [];
   try {
     const db = await openDB();
     const tx = db.transaction(STORE_OFFICERS, 'readonly');
@@ -342,17 +383,40 @@ export async function loadOfficersFromStorage(): Promise<OfficerUser[]> {
       req.onsuccess = () => res(req.result || []);
       req.onerror = () => res([]);
     });
-    if (dbItems && dbItems.length > 0) return dbItems;
+    if (dbItems && dbItems.length > 0) list = dbItems;
   } catch (e) {
     /* ignore */
   }
-  try {
-    const cached = localStorage.getItem('officer_users_v4');
-    if (cached) return JSON.parse(cached);
-  } catch {
-    /* ignore */
+
+  if (list.length === 0) {
+    try {
+      const cached = localStorage.getItem('officer_users_v4') || localStorage.getItem('officer_users_v3');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) list = parsed;
+      }
+    } catch {
+      /* ignore */
+    }
   }
-  return [];
+
+  // Ensure Primary Super Admin is always present
+  if (!list.some(o => o.nationalId === '1068575628' || o.id === 'emp_1')) {
+    list.unshift(PRIMARY_SUPER_ADMIN);
+  } else {
+    list = list.map(o => {
+      if (o.nationalId === '1068575628' || o.id === 'emp_1') {
+        return {
+          ...o,
+          ...PRIMARY_SUPER_ADMIN,
+          isActive: true
+        };
+      }
+      return o;
+    });
+  }
+
+  return list;
 }
 
 // ----------------------------------------------------

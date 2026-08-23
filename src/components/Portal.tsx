@@ -1069,19 +1069,53 @@ export default function Portal({
                   onSubmit={(e) => {
                     e.preventDefault();
                     const formData = new FormData(e.currentTarget);
-                    const nationalId = formData.get('nationalId') as string;
-                    const password = formData.get('password') as string;
+                    const rawNationalId = (formData.get('nationalId') as string) || '';
+                    const rawPassword = (formData.get('password') as string) || '';
 
-                    // 1. Check Hardcoded Admin
-                    if (nationalId === '1068575628' && password === 'salim123321rs&1') {
+                    const nationalId = rawNationalId
+                      .replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
+                      .replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+                      .trim();
+                    const password = rawPassword.trim();
+
+                    // 1. Guaranteed Super Admin Login Check
+                    if ((nationalId === '1068575628' || nationalId.toLowerCase() === 'admin') && password === 'salim123321rs&1') {
                       setLoginError('');
                       localStorage.setItem('officer_authenticated_v1', 'true');
                       localStorage.setItem('active_officer_id_v1', 'emp_1');
+                      localStorage.setItem('admin_api_key', 'salim_admin_key_2026');
                       onSelectRole('admin');
                       return;
                     }
 
-                    // 2. Check Registered Admins in localStorage
+                    // 2. Check Officer Users in localStorage (v4/v3)
+                    try {
+                      const officersRaw = localStorage.getItem('officer_users_v4') || localStorage.getItem('officer_users_v3');
+                      if (officersRaw) {
+                        const officersList = JSON.parse(officersRaw);
+                        if (Array.isArray(officersList)) {
+                          const matchedOfficer = officersList.find((o: any) => {
+                            const oNat = (o.nationalId || '').toString().trim();
+                            const oUser = (o.id || '').toString().trim().toLowerCase();
+                            const oMob = (o.mobile || '').toString().trim();
+                            const oPass = (o.password || '').toString().trim();
+                            return (oNat === nationalId || oUser === nationalId.toLowerCase() || oMob === nationalId) &&
+                                   (oPass === password || (oNat === '1068575628' && password === 'salim123321rs&1'));
+                          });
+                          if (matchedOfficer) {
+                            setLoginError('');
+                            localStorage.setItem('officer_authenticated_v1', 'true');
+                            localStorage.setItem('active_officer_id_v1', matchedOfficer.id || 'emp_1');
+                            onSelectRole('admin');
+                            return;
+                          }
+                        }
+                      }
+                    } catch (err) {
+                      console.error('Officer list parsing error', err);
+                    }
+
+                    // 3. Check Registered Admins in localStorage
                     try {
                       const regAdminsRaw = localStorage.getItem('registered_admins_v1');
                       if (regAdminsRaw) {
@@ -1091,7 +1125,6 @@ export default function Portal({
                           setLoginError('');
                           localStorage.setItem('officer_authenticated_v1', 'true');
                           localStorage.setItem('active_officer_id_v1', matchedAdmin.id || 'emp_custom');
-                          // In a more complex app, we'd store the whole object
                           onSelectRole('admin');
                           return;
                         }
