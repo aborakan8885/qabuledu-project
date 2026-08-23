@@ -60,6 +60,10 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Trust proxy for accurate IP identification behind load balancers/proxies
+  // Required by express-rate-limit to prevent ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+  app.set('trust proxy', 1);
+
   // Standard Security Headers with Helmet
   app.use(helmet({
     contentSecurityPolicy: false, 
@@ -72,7 +76,11 @@ async function startServer() {
     max: 1000, // Limit each IP to 1000 requests per windowMs
     standardHeaders: true,
     legacyHeaders: false,
-    message: "Too many requests from this IP, please try again later."
+    message: "Too many requests from this IP, please try again later.",
+    validate: {
+      xForwardedForHeader: false,
+      defaultKeys: false
+    }
   });
   app.use("/api/", limiter);
 

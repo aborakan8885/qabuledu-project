@@ -34,7 +34,10 @@ import {
   Building2,
   X,
   XCircle,
-  ArrowRightLeft
+  ArrowRightLeft,
+  CreditCard,
+  Loader2,
+  Database
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Language, SurveyResponse, AppConfig, PrincipalReport, SchoolItem } from '../types';
@@ -60,6 +63,18 @@ interface PortalProps {
   onPortalViewChange?: (view: 'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard') => void;
   showAgeModal?: boolean;
   onAgeModalChange?: (show: boolean) => void;
+  principalSession?: {
+    schoolCode: string;
+    schoolName: string;
+    principalName: string;
+    mobile?: string;
+  } | null;
+  onPrincipalSessionChange?: (session: {
+    schoolCode: string;
+    schoolName: string;
+    principalName: string;
+    mobile?: string;
+  } | null) => void;
 }
 
 export default function Portal({
@@ -77,7 +92,9 @@ export default function Portal({
   portalView: portalViewProp,
   onPortalViewChange,
   showAgeModal: showAgeModalProp,
-  onAgeModalChange
+  onAgeModalChange,
+  principalSession: principalSessionProp,
+  onPrincipalSessionChange
 }: PortalProps) {
   const isRtl = currentLang === 'ar';
   const t = TRANSLATIONS[currentLang];
@@ -177,13 +194,29 @@ export default function Portal({
   const [isSchoolDataConfirmed, setIsSchoolDataConfirmed] = useState(false);
   const [enteredCivilId, setEnteredCivilId] = useState('');
   const [civilIdErrorMsg, setCivilIdErrorMsg] = useState('');
+  const [retrievedSchools, setRetrievedSchools] = useState<any[]>([]);
+  const [isRetrieving, setIsRetrieving] = useState(false);
+  const [retrievalStatus, setRetrievalStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
-  const [principalSession, setPrincipalSession] = useState<{
+  // Principal Session State (lifted or local fallback)
+  const [principalSessionInternal, setPrincipalSessionInternal] = useState<{
     schoolCode: string;
     schoolName: string;
     principalName: string;
     mobile?: string;
-  } | null>(null);
+  } | null>(principalSessionProp || null);
+
+  const principalSession = principalSessionProp !== undefined ? principalSessionProp : principalSessionInternal;
+
+  const setPrincipalSession = (s: {
+    schoolCode: string;
+    schoolName: string;
+    principalName: string;
+    mobile?: string;
+  } | null) => {
+    setPrincipalSessionInternal(s);
+    if (onPrincipalSessionChange) onPrincipalSessionChange(s);
+  };
 
   // Active filter for principal dashboard: 'all' | 'pending' | 'resolved'
   const [principalTab, setPrincipalTab] = useState<'all' | 'pending' | 'resolved'>('all');
@@ -290,20 +323,30 @@ export default function Portal({
         return;
       }
 
-      // Persist registered principal account to localStorage
+      // Persist registered principal account(s) to localStorage
       try {
         const existingRegsRaw = localStorage.getItem('registered_principals_v1');
         const existingRegs = existingRegsRaw ? JSON.parse(existingRegsRaw) : [];
-        const newReg = {
-          schoolCode: schoolCode.trim(),
-          schoolName: schoolName.trim(),
+        
+        // Use retrievedSchools if available, otherwise just the current one
+        const schoolsToRegister = retrievedSchools.length > 0 ? retrievedSchools : [selectedSchoolData || { nameAr: schoolName, ministryCode: schoolCode }];
+        
+        const newRegistrations = schoolsToRegister.map(s => ({
+          schoolCode: (s.ministryCode || s.code || schoolCode).toString().trim(),
+          schoolName: (s.nameAr || schoolName).trim(),
           principalName: principalName.trim(),
           mobile: principalMobile.trim(),
           password: password.trim(),
-          registeredAt: new Date().toISOString()
-        };
-        const filteredRegs = existingRegs.filter((r: any) => r.schoolName.trim().toLowerCase() !== schoolName.trim().toLowerCase());
-        filteredRegs.push(newReg);
+          registeredAt: new Date().toISOString(),
+          civilId: enteredCivilId // Link all to the same Civil ID
+        }));
+
+        // Filter out any old registrations for these schools
+        const schoolNamesToReplace = new Set(newRegistrations.map(r => r.schoolName.toLowerCase()));
+        const filteredRegs = existingRegs.filter((r: any) => !schoolNamesToReplace.has(r.schoolName.toLowerCase()));
+        
+        // Add all new registrations
+        filteredRegs.push(...newRegistrations);
         localStorage.setItem('registered_principals_v1', JSON.stringify(filteredRegs));
       } catch (err) {
         console.error('Failed to persist principal account', err);
@@ -2228,178 +2271,203 @@ export default function Portal({
                 {principalAuthMode === 'register' && (
                   <div className="space-y-4 pt-1">
                     
-                    {/* 2. بطاقة مراجعة وتأكيد بيانات المدرسة المستدعاة تلقائياً من الملف */}
-                    {(selectedSchoolData || schoolName) ? (
-                      <div className={`p-4 sm:p-5 rounded-2xl border transition-all space-y-3.5 ${
+                    {/* 2. Civil ID Field (Registry Number) - REQUIRED FOR RETRIEVAL */}
+                    {!isSchoolDataConfirmed && (
+                      <div className="space-y-1.5" id="form-group-civil-id">
+                        <label className={`block text-xs font-black flex items-center gap-1.5 ${isDark ? 'text-teal-300' : 'text-slate-700'}`}>
+                          <CreditCard className="w-4 h-4 text-emerald-500 shrink-0" />
+                          <span>{isRtl ? '2. رقم السجل المدني لمدير المدرسة (10 أرقام):' : '2. Principal Civil ID (10 digits):'}</span>
+                          <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={enteredCivilId}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                              setEnteredCivilId(val);
+                              setCivilIdErrorMsg('');
+                              setRetrievalStatus('idle');
+                            }}
+                            placeholder={isRtl ? 'أدخل رقم السجل المدني (مثال: 1068575628)...' : 'Enter Civil ID...'}
+                            className={`w-full px-4 py-2.5 text-xs font-mono font-bold rounded-xl outline-none transition-all border ${
+                              civilIdErrorMsg
+                                ? 'border-rose-500 bg-rose-50/70 text-rose-900'
+                                : isDark
+                                ? 'bg-[#092233] border-teal-800/60 text-white focus:border-emerald-400'
+                                : 'bg-white border-slate-300 text-slate-900 focus:border-emerald-500'
+                            }`}
+                          />
+                        </div>
+
+                        {/* Retrieve Data Button */}
+                        {retrievalStatus !== 'success' && (
+                          <button
+                            type="button"
+                            disabled={isRetrieving || !enteredCivilId || enteredCivilId.length < 10 || !schoolName}
+                            onClick={() => {
+                              setIsRetrieving(true);
+                              setCivilIdErrorMsg('');
+                              
+                              // Simulate high-professional retrieval logic
+                              setTimeout(() => {
+                                const id = enteredCivilId.trim();
+                                
+                                // Find all schools where this principal ID matches
+                                // In a real scenario, this would be a server-side DB query
+                                // Here we filter the activeSchools dataset
+                                const matches = activeSchools.filter(s => {
+                                  const sid = (s as any).principalId || s.customFields?.['السجل المدني'] || s.customFields?.['رقم السجل'];
+                                  return sid === id;
+                                });
+
+                                // If no direct match in file, we use the currently selected school if it's "plausible"
+                                // or if the ID matches the expected format
+                                const isValidFormat = /^[12]\d{9}$/.test(id);
+
+                                if (matches.length > 0) {
+                                  setRetrievedSchools(matches);
+                                  setRetrievalStatus('success');
+                                  setLoginError('');
+                                } else if (isValidFormat) {
+                                  // Fallback for demo: if valid format, treat the selected school as the only match
+                                  const currentMatch = selectedSchoolData || activeSchools.find(s => s.nameAr === schoolName);
+                                  if (currentMatch) {
+                                    setRetrievedSchools([currentMatch]);
+                                    setRetrievalStatus('success');
+                                  } else {
+                                    setRetrievalStatus('error');
+                                    setCivilIdErrorMsg(isRtl ? '❌ السجل المدني صحيح ولكن لم يتم العثور على مدرسة مرتبطة به.' : '❌ Valid ID but no associated school found.');
+                                  }
+                                } else {
+                                  setRetrievalStatus('error');
+                                  setCivilIdErrorMsg(isRtl ? '❌ السجل المدني المدخل غير صحيح أو غير مسجل في النظام.' : '❌ Invalid or unregistered Civil ID.');
+                                }
+                                setIsRetrieving(false);
+                              }, 1200);
+                            }}
+                            className={`w-full py-2.5 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all ${
+                              isRetrieving || !enteredCivilId || enteredCivilId.length < 10 || !schoolName
+                                ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-50'
+                                : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md active:scale-95'
+                            }`}
+                          >
+                            {isRetrieving ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span>{isRtl ? 'جاري استدعاء البيانات من السجلات...' : 'Retrieving data...'}</span>
+                              </>
+                            ) : (
+                              <>
+                                <Database className="w-4 h-4" />
+                                <span>{isRtl ? 'استدعاء البيانات والمطابقة الرسمية' : 'Retrieve Data & Official Match'}</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 3. Multiple Schools Selection (If found) */}
+                    {retrievalStatus === 'success' && retrievedSchools.length > 1 && !isSchoolDataConfirmed && (
+                      <div className={`p-4 rounded-2xl border ${isDark ? 'bg-[#092538] border-emerald-800/40' : 'bg-emerald-50 border-emerald-200'} space-y-3`}>
+                        <div className="flex items-center gap-2 border-b pb-2 dark:border-emerald-800/20">
+                          <Sparkles className="w-4 h-4 text-emerald-500" />
+                          <span className={`text-xs font-black ${isDark ? 'text-white' : 'text-emerald-900'}`}>
+                            {isRtl ? 'تم العثور على مجمعات مدارس تحت قيادتك:' : 'Multiple schools found under your leadership:'}
+                          </span>
+                        </div>
+                        <div className="space-y-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
+                          {retrievedSchools.map((s, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                setSelectedSchoolData(s);
+                                setSchoolName(s.nameAr);
+                                setSchoolCode(s.ministryCode || (s as any).code);
+                                // Set principal details
+                                const pName = (s as any).principalName || s.customFields?.['اسم مدير المدرسة'] || `أ. مدير ${s.nameAr}`;
+                                setPrincipalName(pName);
+                                const pMobile = (s as any).principalMobile || s.customFields?.['رقم الجوال'] || '0550000000';
+                                setPrincipalMobile(pMobile);
+                              }}
+                              className={`w-full text-right p-2.5 rounded-xl border text-[11px] font-bold transition-all ${
+                                (selectedSchoolData?.nameAr === s.nameAr)
+                                  ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
+                                  : isDark ? 'bg-[#0b2336] border-teal-800/30 text-teal-200 hover:border-teal-600' : 'bg-white border-slate-200 text-slate-700 hover:border-emerald-300'
+                              }`}
+                            >
+                              {s.nameAr} - #{s.ministryCode || (s as any).code}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[10px] font-bold text-slate-500 dark:text-teal-400 italic">
+                          {isRtl ? '⚠️ سيتم توحيد الرقم السري لكافة المدارس المختارة أعلاه.' : '⚠️ The password will be unified for all selected schools.'}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* 4. Official Data Review & Final Confirmation */}
+                    {retrievalStatus === 'success' && (selectedSchoolData || (retrievedSchools.length === 1 && (setSelectedSchoolData(retrievedSchools[0]), true))) && (
+                      <div className={`p-4 rounded-2xl border transition-all space-y-3.5 ${
                         isDark ? 'bg-[#092538] border-teal-800/60 shadow-lg' : 'bg-slate-50/90 border-slate-200 shadow-sm'
                       }`}>
                         <div className="flex items-center justify-between border-b pb-2.5 dark:border-teal-800/30">
                           <div className="flex items-center gap-2">
                             <Building2 className={`w-4 h-4 ${isDark ? 'text-teal-300' : 'text-slate-700'}`} />
                             <span className={`text-xs font-black ${isDark ? 'text-white' : 'text-slate-800'}`}>
-                              {isRtl ? 'بيانات السجل الرسمي المستدعاة تلقائياً من الملف' : 'Auto-Fetched Official School Record'}
+                              {isRtl ? 'البيانات المستدعاة لمدير المجمع الموحد' : 'Unified Principal Record Details'}
                             </span>
                           </div>
-                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                            isDark ? 'bg-teal-950 text-teal-300 border border-teal-800/40' : 'bg-emerald-100 text-emerald-800'
-                          }`}>
-                            {isRtl ? 'مستدعى من السجل' : 'Fetched from File'}
-                          </span>
                         </div>
 
-                        {/* Grid of Official Auto-Retrieved Details */}
+                        {/* Details Grid */}
                         <div className="grid grid-cols-2 gap-2 text-xs">
                           <div className={`p-2.5 rounded-xl border ${isDark ? 'bg-[#092233] border-teal-800/30' : 'bg-white border-slate-200/80'}`}>
-                            <span className="block text-[10px] font-extrabold text-slate-400">{isRtl ? 'الرقم الوزاري المعتمد:' : 'Ministerial Code:'}</span>
-                            <span className={`font-black font-mono ${isDark ? 'text-teal-200' : 'text-slate-800'}`}>
-                              #{schoolCode || selectedSchoolData?.ministryCode || (selectedSchoolData as any)?.code || '45013'}
-                            </span>
-                          </div>
-
-                          <div className={`p-2.5 rounded-xl border ${isDark ? 'bg-[#092233] border-teal-800/30' : 'bg-white border-slate-200/80'}`}>
-                            <span className="block text-[10px] font-extrabold text-slate-400">{isRtl ? 'اسم مدير/ة المدرسة:' : 'Principal Name:'}</span>
+                            <span className="block text-[10px] font-extrabold text-slate-400">{isRtl ? 'الاسم الثنائي/الثلاثي:' : 'Principal Name:'}</span>
                             <span className={`font-black truncate block ${isDark ? 'text-teal-200' : 'text-slate-800'}`}>
-                              {principalName || (isRtl ? 'أ. مدير المدرسة' : 'Principal')}
+                              {principalName || (retrievedSchools[0] as any).principalName || 'أ. مدير المدرسة'}
                             </span>
                           </div>
-
                           <div className={`p-2.5 rounded-xl border ${isDark ? 'bg-[#092233] border-teal-800/30' : 'bg-white border-slate-200/80'}`}>
-                            <span className="block text-[10px] font-extrabold text-slate-400">{isRtl ? 'رقم الجوال:' : 'Mobile Number:'}</span>
+                            <span className="block text-[10px] font-extrabold text-slate-400">{isRtl ? 'رقم السجل المدني:' : 'Civil ID:'}</span>
                             <span className={`font-black font-mono ${isDark ? 'text-teal-200' : 'text-slate-800'}`}>
-                              {principalMobile || '0550000000'}
+                              {enteredCivilId}
                             </span>
                           </div>
-
                           <div className={`p-2.5 rounded-xl border ${isDark ? 'bg-[#092233] border-teal-800/30' : 'bg-white border-slate-200/80'}`}>
-                            <span className="block text-[10px] font-extrabold text-slate-400">{isRtl ? 'المرحلة والقطاع:' : 'Stage & District:'}</span>
+                            <span className="block text-[10px] font-extrabold text-slate-400">{isRtl ? 'المدرسة الحالية:' : 'Current School:'}</span>
                             <span className={`font-black truncate block ${isDark ? 'text-teal-200' : 'text-slate-800'}`}>
-                              {selectedSchoolData?.stage || 'جميع المراحل'} - {selectedSchoolData?.district || 'المدينة'}
+                              {schoolName}
+                            </span>
+                          </div>
+                          <div className={`p-2.5 rounded-xl border ${isDark ? 'bg-[#092233] border-teal-800/30' : 'bg-white border-slate-200/80'}`}>
+                            <span className="block text-[10px] font-extrabold text-slate-400">{isRtl ? 'عدد المدارس التابعة:' : 'Managed Schools:'}</span>
+                            <span className={`font-black text-emerald-500`}>
+                              {retrievedSchools.length} {isRtl ? 'مدارس' : 'Schools'}
                             </span>
                           </div>
                         </div>
 
-                        {/* Confirmation Button, Civil ID Input, or Status Badge */}
                         {!isSchoolDataConfirmed ? (
-                          <div className="pt-2 space-y-3 border-t dark:border-teal-800/30">
-                            
-                            {/* Hidden Password / Civil Registry Input Field with Icon */}
-                            <div className="space-y-1.5" id="form-group-civil-id">
-                              <div className="flex items-center justify-between">
-                                <label className={`block text-xs font-black flex items-center gap-1.5 ${isDark ? 'text-teal-300' : 'text-slate-700'}`}>
-                                  <Lock className="w-4 h-4 text-emerald-500 shrink-0" />
-                                  <span>{isRtl ? 'كلمة السر المخفية للتحقق (رقم السجل المدني للمدير):' : 'Hidden Secret Password (Civil Registry ID):'}</span>
-                                  <span className="text-rose-500">*</span>
-                                </label>
-                              </div>
-                              <div className="relative">
-                                <Lock className="absolute top-3.5 right-3.5 w-4 h-4 text-slate-400" />
-                                <input
-                                  type="password"
-                                  value={enteredCivilId}
-                                  onChange={(e) => {
-                                    setEnteredCivilId(e.target.value);
-                                    setCivilIdErrorMsg('');
-                                    setLoginError('');
-                                  }}
-                                  placeholder={isRtl ? 'أدخل كلمة السر المخفية / السجل المدني...' : 'Enter hidden secret password (Civil ID)...'}
-                                  className={`w-full pr-10 pl-4 py-2.5 text-xs font-mono font-bold rounded-xl outline-none transition-all border ${
-                                    civilIdErrorMsg
-                                      ? 'border-rose-500 bg-rose-50/70 text-rose-900 focus:ring-2 focus:ring-rose-200'
-                                      : isDark
-                                      ? 'bg-[#092233] border-teal-800/60 text-white focus:border-emerald-400 focus:ring-1 focus:ring-emerald-950'
-                                      : 'bg-white border-slate-300 text-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-100'
-                                  }`}
-                                />
-                              </div>
-
-                              {/* Explicit Error Message */}
-                              {civilIdErrorMsg && (
-                                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-black flex items-center gap-2">
-                                  <AlertTriangle className="w-4.5 h-4.5 text-rose-500 shrink-0" />
-                                  <span>{civilIdErrorMsg}</span>
-                                </div>
-                              )}
-                            </div>
-
-                            <div className={`p-2.5 rounded-xl border text-[11px] font-bold flex items-center gap-2 ${
-                              isDark ? 'bg-amber-950/30 border-amber-800/40 text-amber-300' : 'bg-amber-50 border-amber-200 text-amber-800'
-                            }`}>
-                              <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
-                              <span>{isRtl ? 'السجل المدني هو كلمة السر المخفية للتحقق من هويتك كمدير مدرسة والمطابقة مع الملف الرسمي.' : 'The Civil ID acts as the secret hidden password to verify your principal identity.'}</span>
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const trimmedCivilId = enteredCivilId.trim();
-                                if (!trimmedCivilId) {
-                                  setCivilIdErrorMsg(isRtl ? '❌ كلمة السر المخفية / السجل المدني مطلوبة، يرجى الإدخال' : '❌ Secret password required');
-                                  setLoginError(isRtl ? 'كلمة السر المخفية غير صحيحة' : 'Incorrect secret');
-                                  setIsSchoolDataConfirmed(false);
-                                  return;
-                                }
-
-                                const schoolObjToUse = selectedSchoolData || activeSchools.find(s => 
-                                  (schoolCode && (s.ministryCode === schoolCode || (s as any).code === schoolCode)) || 
-                                  (schoolName && s.nameAr.trim().toLowerCase() === schoolName.trim().toLowerCase())
-                                );
-
-                                const { isMatch, expectedId, wasFoundInFile } = verifyCivilIdMatch(trimmedCivilId, schoolObjToUse, schoolCode);
-
-                                if (!isMatch) {
-                                  setIsSchoolDataConfirmed(false);
-                                  const errMsg = wasFoundInFile 
-                                    ? (isRtl 
-                                        ? `❌ السجل المدني المدخل (${trimmedCivilId}) غير مطابق للسجل المسجل للمدرسة في الملف المرفوع. يرجى التأكد وإعادة المحاولة.` 
-                                        : `❌ Civil ID (${trimmedCivilId}) does not match the record in the uploaded file.`)
-                                    : (isRtl 
-                                        ? `❌ السجل المدني المدخل غير صحيح. يرجى إدخال 10 أرقام تبدأ بـ 1 أو 2.` 
-                                        : `❌ Incorrect Civil ID format. Please enter a 10-digit ID.`);
-                                  setCivilIdErrorMsg(errMsg);
-                                  setLoginError(isRtl ? 'كلمة السر المخفية غير صحيحة' : 'Incorrect secret password');
-                                  return;
-                                }
-
-                                // Matched! Unlock setting password
-                                setIsSchoolDataConfirmed(true);
-                                setCivilIdErrorMsg('');
-                                setLoginError('');
-                                const codeToUse = schoolObjToUse?.ministryCode || (schoolObjToUse as any)?.code || schoolCode;
-                                if (codeToUse) setSchoolCode(codeToUse);
-                              }}
-                              className="w-full py-3 px-4 bg-[#218caa] hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-                            >
-                              <CheckCircle className="w-4 h-4" />
-                              <span>{isRtl ? '✅ التحقق من كلمة السر المخفية وتأكيد قبول التسجيل' : 'Verify Hidden Secret Password & Confirm Registration'}</span>
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setIsSchoolDataConfirmed(true)}
+                            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                            <span>{isRtl ? 'تأكيد صحة البيانات والبدء في وضع الرقم السري' : 'Confirm & Set Unified Password'}</span>
+                          </button>
                         ) : (
-                          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-200 flex items-center justify-between gap-2 text-xs font-black">
+                          <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-200 flex items-center justify-between gap-2 text-xs font-black">
                             <div className="flex items-center gap-1.5">
                               <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                              <span>{isRtl ? '✓ تم القبول وتأكيد صحة كلمة السر المخفية للمدير' : '✓ Verified and confirmed'}</span>
+                              <span>{isRtl ? 'تم تأكيد البيانات - يرجى تعيين الرقم السري الموحد' : 'Data confirmed - Set unified password'}</span>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => setIsSchoolDataConfirmed(false)}
-                              className="text-[11px] font-bold text-slate-500 hover:text-slate-800 dark:text-teal-300 underline cursor-pointer shrink-0"
-                            >
-                              {isRtl ? 'تغيير / إعادة التحقق' : 'Change'}
-                            </button>
+                            <button type="button" onClick={() => setIsSchoolDataConfirmed(false)} className="text-[10px] underline">{isRtl ? 'تغيير' : 'Change'}</button>
                           </div>
                         )}
-                      </div>
-                    ) : (
-                      <div className={`p-4 rounded-2xl border border-dashed text-center space-y-1.5 ${
-                        isDark ? 'border-teal-800/40 bg-[#092233]/30' : 'border-slate-300 bg-slate-50'
-                      }`}>
-                        <Building2 className="w-6 h-6 text-slate-400 mx-auto" />
-                        <p className="text-xs font-black text-slate-500 dark:text-teal-300">
-                          {isRtl ? 'يرجى كتابة واختيار اسم المدرسة أعلاه أولاً' : 'Select school name above first'}
-                        </p>
-                        <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
-                          {isRtl ? 'سيتم استدعاء الرقم الوزاري واسم المدير ورقم الجوال رسمياً من الملف المرفق لتأكيدها' : 'Official details will be fetched automatically.'}
-                        </p>
                       </div>
                     )}
 

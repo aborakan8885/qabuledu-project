@@ -24,6 +24,11 @@ interface HeaderProps {
   canGoBack?: boolean;
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
+  principalSession?: {
+    principalName: string;
+    schoolName: string;
+    schoolCode: string;
+  } | null;
 }
 
 export default function Header({
@@ -41,7 +46,8 @@ export default function Header({
   showHome = false,
   canGoBack = false,
   theme,
-  onToggleTheme
+  onToggleTheme,
+  principalSession
 }: HeaderProps) {
   const t = TRANSLATIONS[currentLang];
   const isRtl = currentLang === 'ar';
@@ -53,6 +59,20 @@ export default function Header({
       <div className="h-1.5 w-full bg-gradient-to-r from-[#179bad] via-[#1bb3a2] via-[#28c792] to-[#60e090]" />
 
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-1 sm:py-1.5">
+        {/* Principal Welcome Banner (If Logged In) */}
+        {principalSession && (
+          <div className="mb-2 flex items-center justify-center">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 shadow-inner animate-fade-in">
+              <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[10px] sm:text-xs font-black text-white">
+                {isRtl 
+                  ? `مرحباً بك أ. ${principalSession.principalName} - مدرسة: ${principalSession.schoolName}` 
+                  : `Welcome Principal ${principalSession.principalName} - School: ${principalSession.schoolName}`}
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col md:flex-row justify-between items-center gap-1 md:gap-3">
           
           {/* 1. Right Side (Text Card: Kingdom, Education Directorate, Educational Affairs) */}

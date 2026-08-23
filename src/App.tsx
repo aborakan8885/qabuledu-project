@@ -66,6 +66,12 @@ export default function App() {
   // Portal view state & Modal state
   const [portalView, setPortalViewState] = useState<'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard'>('selection');
   const [showAgeModal, setShowAgeModalState] = useState<boolean>(false);
+  const [principalSession, setPrincipalSession] = useState<{
+    schoolCode: string;
+    schoolName: string;
+    principalName: string;
+    mobile?: string;
+  } | null>(null);
 
   // Navigation History Stack
   type NavState = {
@@ -462,6 +468,7 @@ export default function App() {
         canGoBack={historyStackRef.current.length > 0}
         theme={theme}
         onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+        principalSession={principalSession}
       />
 
       <main className={`flex-1 flex flex-col relative min-h-0 ${userRole === 'portal' ? 'pb-12' : 'pb-32'}`}>
@@ -494,6 +501,8 @@ export default function App() {
                   onPortalViewChange={handlePortalViewChange}
                   showAgeModal={showAgeModal}
                   onAgeModalChange={handleAgeModalChange}
+                  principalSession={principalSession}
+                  onPrincipalSessionChange={setPrincipalSession}
                 />
               </ErrorBoundary>
             </div>
