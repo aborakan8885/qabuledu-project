@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { verifyCivilIdMatch, extractCivilIdFromSchool, cleanDigitsString } from '../utils/civilId';
+import { verifyCivilIdMatch, extractCivilIdFromSchool, cleanDigitsString, findSchoolsByPrincipalCivilId, extractPrincipalInfoFromSchool } from '../utils/civilId';
 import { AgeVerificationModal } from './AgeVerificationModal';
 import { 
   Map,
@@ -2438,24 +2438,25 @@ export default function Portal({
                             setIsRetrieving(true);
                             setLoginError('');
                             setTimeout(() => {
-                              // Simulate searching schools by principal ID or name
-                              // In this mock, we'll find schools where the ID matches or just return some for demo
-                              const found = activeSchools.filter(s => (s as any).principalId === enteredCivilId || (s as any).nationalId === enteredCivilId);
+                              // Retrieve all schools matching the principal's Civil ID against the column 'هوية مدير المدرسة'
+                              const found = findSchoolsByPrincipalCivilId(enteredCivilId, activeSchools);
                               
                               if (found.length > 0) {
                                 setRetrievedSchools(found);
                                 setRetrievalStatus('success');
                                 const first = found[0];
-                                setPrincipalName((first as any).principalName || first.customFields?.['اسم مدير المدرسة'] || 'أ. مدير المدرسة');
-                                setPrincipalMobile((first as any).principalMobile || (first as any).mobile || '0550000000');
-                                setSchoolCode(first.ministryCode || (first as any).code || '45013');
+                                const info = extractPrincipalInfoFromSchool(first);
+                                setPrincipalName(info.name);
+                                setPrincipalMobile(info.mobile);
+                                setSchoolCode(info.code);
                                 setSchoolName(first.nameAr);
+                                setSelectedSchoolData(first);
                               } else {
                                 setRetrievalStatus('error');
-                                setLoginError(isRtl ? 'عفواً، لم يتم العثور على أي مدارس مرتبطة بهذا السجل المدني في النظام.' : 'No schools found for this Civil ID.');
+                                setLoginError(isRtl ? 'عفواً، لم يتم العثور على أي مدارس مطابقة لرقم السجل المدني المدخل في عمود (هوية مدير المدرسة).' : 'No schools found for this Civil ID in the Principal ID column.');
                               }
                               setIsRetrieving(false);
-                            }, 1200);
+                            }, 900);
                           }}
                           className={`w-full py-3.5 rounded-xl font-black text-sm shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 ${
                             isRetrieving || enteredCivilId.length < 10
@@ -2977,40 +2978,26 @@ export default function Portal({
                               
                               // Simulate high-professional retrieval logic
                               setTimeout(() => {
-                                const id = enteredCivilId.trim();
-                                
-                                // Find all schools where this principal ID matches
-                                // In a real scenario, this would be a server-side DB query
-                                // Here we filter the activeSchools dataset
-                                const matches = activeSchools.filter(s => {
-                                  const sid = (s as any).principalId || s.customFields?.['السجل المدني'] || s.customFields?.['رقم السجل'];
-                                  return sid === id;
-                                });
-
-                                // If no direct match in file, we use the currently selected school if it's "plausible"
-                                // or if the ID matches the expected format
-                                const isValidFormat = /^[12]\d{9}$/.test(id);
+                                // Match Civil ID against the column 'هوية مدير المدرسة' and linked properties
+                                const matches = findSchoolsByPrincipalCivilId(enteredCivilId, activeSchools);
 
                                 if (matches.length > 0) {
                                   setRetrievedSchools(matches);
                                   setRetrievalStatus('success');
                                   setLoginError('');
-                                } else if (isValidFormat) {
-                                  // Fallback for demo: if valid format, treat the selected school as the only match
-                                  const currentMatch = selectedSchoolData || activeSchools.find(s => s.nameAr === schoolName);
-                                  if (currentMatch) {
-                                    setRetrievedSchools([currentMatch]);
-                                    setRetrievalStatus('success');
-                                  } else {
-                                    setRetrievalStatus('error');
-                                    setCivilIdErrorMsg(isRtl ? '❌ السجل المدني صحيح ولكن لم يتم العثور على مدرسة مرتبطة به.' : '❌ Valid ID but no associated school found.');
-                                  }
+                                  const first = matches[0];
+                                  const info = extractPrincipalInfoFromSchool(first);
+                                  setPrincipalName(info.name);
+                                  setPrincipalMobile(info.mobile);
+                                  setSchoolCode(info.code);
+                                  setSchoolName(first.nameAr);
+                                  setSelectedSchoolData(first);
                                 } else {
                                   setRetrievalStatus('error');
-                                  setCivilIdErrorMsg(isRtl ? '❌ السجل المدني المدخل غير صحيح أو غير مسجل في النظام.' : '❌ Invalid or unregistered Civil ID.');
+                                  setCivilIdErrorMsg(isRtl ? '❌ لم يتم العثور على أي مدارس مرتبطة بهذا السجل المدني في عمود (هوية مدير المدرسة).' : '❌ No schools found matching this Civil ID in the Principal ID column.');
                                 }
                                 setIsRetrieving(false);
-                              }, 1200);
+                              }, 900);
                             }}
                             className={`w-full py-2.5 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all ${
                               isRetrieving || !enteredCivilId || enteredCivilId.length < 10 || !schoolName

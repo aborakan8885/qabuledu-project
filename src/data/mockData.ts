@@ -456,9 +456,51 @@ export const TRANSLATIONS = {
 };
 
 export const INITIAL_SCHOOLS: SchoolItem[] = [
-  { id: 'sch_101', nameAr: 'مدرسة أحد الابتدائية', nameEn: 'Ohod Elementary School', ministryCode: '1001', stage: 'Elementary', gender: 'boys', district: 'القطاع الشرقي', principalId: '1234567890' },
-  { id: 'sch_102', nameAr: 'ثانوية الفتح بالمدينة المنورة', nameEn: 'Al-Fateh Secondary School', ministryCode: '1002', stage: 'Secondary', gender: 'boys', district: 'القطاع الشمالي', principalId: '1234567890' },
-  { id: 'sch_103', nameAr: 'مجمع طيبة التعليمي', nameEn: 'Taiba Educational Complex', ministryCode: '1003', stage: 'All', gender: 'boys', district: 'القطاع الغربي', principalId: '1234567890' },
+  { 
+    id: 'sch_101', 
+    nameAr: 'مدرسة أحد الابتدائية', 
+    nameEn: 'Ohod Elementary School', 
+    ministryCode: '1001', 
+    stage: 'Elementary', 
+    gender: 'boys', 
+    district: 'القطاع الشرقي', 
+    principalId: '1234567890',
+    customFields: {
+      'هوية مدير المدرسة': '1234567890',
+      'اسم مدير المدرسة': 'أ. عبدالرحمن الأحمدي',
+      'رقم الجوال': '0551234567'
+    }
+  },
+  { 
+    id: 'sch_102', 
+    nameAr: 'ثانوية الفتح بالمدينة المنورة', 
+    nameEn: 'Al-Fateh Secondary School', 
+    ministryCode: '1002', 
+    stage: 'Secondary', 
+    gender: 'boys', 
+    district: 'القطاع الشمالي', 
+    principalId: '1234567890',
+    customFields: {
+      'هوية مدير المدرسة': '1234567890',
+      'اسم مدير المدرسة': 'أ. عبدالرحمن الأحمدي',
+      'رقم الجوال': '0551234567'
+    }
+  },
+  { 
+    id: 'sch_103', 
+    nameAr: 'مجمع طيبة التعليمي', 
+    nameEn: 'Taiba Educational Complex', 
+    ministryCode: '1003', 
+    stage: 'All', 
+    gender: 'boys', 
+    district: 'القطاع الغربي', 
+    principalId: '1234567890',
+    customFields: {
+      'هوية مدير المدرسة': '1234567890',
+      'اسم مدير المدرسة': 'أ. عبدالرحمن الأحمدي',
+      'رقم الجوال': '0551234567'
+    }
+  },
   { id: 'sch_104', nameAr: 'المتوسطة الثانية عشر للبنات', nameEn: '12th Intermediate School for Girls', ministryCode: '1004', stage: 'Intermediate', gender: 'girls', district: 'القطاع الشمالي' },
   { id: 'sch_105', nameAr: 'مدرسة الأنصار المتوسطة', nameEn: 'Al-Ansar Intermediate School', ministryCode: '1005', stage: 'Intermediate', gender: 'boys', district: 'القطاع الجنوبي' },
   { id: 'sch_106', nameAr: 'مدرسة القباء الابتدائية', nameEn: 'Quba Elementary School', ministryCode: '1006', stage: 'Elementary', gender: 'boys', district: 'القطاع الجنوبي' },
