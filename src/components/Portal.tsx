@@ -193,6 +193,7 @@ export default function Portal({
   // Logged-in Principal Session State
   const [selectedSchoolData, setSelectedSchoolData] = useState<SchoolItem | null>(null);
   const [isSchoolDataConfirmed, setIsSchoolDataConfirmed] = useState(false);
+  const [isPrincipalRegistrationCancelled, setIsPrincipalRegistrationCancelled] = useState(false);
   const [enteredCivilId, setEnteredCivilId] = useState('');
   const [civilIdErrorMsg, setCivilIdErrorMsg] = useState('');
   const [retrievedSchools, setRetrievedSchools] = useState<any[]>([]);
@@ -2306,13 +2307,13 @@ export default function Portal({
                 </div>
                 <h2 className={`text-xl font-black ${isDark ? 'text-white' : 'text-slate-800'}`}>
                   {principalAuthMode === 'login'
-                    ? (isRtl ? 'تسجيل دخول مدير المدرسة' : 'School Principal Login')
-                    : (isRtl ? 'تسجيل جديد لمدير المدرسة' : 'New School Principal Registration')}
+                    ? (isRtl ? 'تسجيل الدخول للمدرسة' : 'School Login')
+                    : (isRtl ? 'تسجيل جديد للمدرسة' : 'New School Registration')}
                 </h2>
                 <p className={`text-xs font-semibold leading-relaxed px-4 ${isDark ? 'text-teal-300' : 'text-slate-500'}`}>
                   {principalAuthMode === 'login'
                     ? (isRtl ? 'الرجاء إدخال اسم المدرسة والرقم السري للمتابعة' : 'Enter school name and password to continue')
-                    : (isRtl ? 'سجل حساب مدرسة جديد لمتابعة البلاغات والطلبات' : 'Register a new school to track reports and requests')}
+                    : (isRtl ? 'استخدم السجل المدني لاسترجاع بياناتك ومدارسك المرتبطة بك' : 'Use your Civil ID to retrieve your data and linked schools')}
                 </p>
               </div>
 
@@ -2369,109 +2370,337 @@ export default function Portal({
 
               <form onSubmit={handlePrincipalLogin} className="space-y-4">
                 
-                {/* 1. اسم المدرسة - اختيار واستدعاء البيانات التلقائي من السجل المرفق */}
-                <div className="space-y-1.5" id="form-group-school-name">
-                  <SchoolSelectDropdown
-                    schools={activeSchools}
-                    value={schoolName}
-                    onChange={(name, code, schoolObj) => {
-                      setSchoolName(name);
-                      
-                      // Auto-retrieve school object from activeSchools dataset
-                      const matched = schoolObj || activeSchools.find(s => 
-                        s.nameAr.trim().toLowerCase() === name.trim().toLowerCase() ||
-                        (code && (s.ministryCode === code || (s as any).code === code))
-                      );
+                {/* REGISTRATION FLOW */}
+                {principalAuthMode === 'register' && (
+                  <div className="space-y-5">
+                    {/* Step 1: ID Input & Retrieval */}
+                    {!retrievedSchools.length && !isPrincipalRegistrationCancelled && (
+                      <div className="space-y-4">
+                        <div className="space-y-1.5">
+                          <label className={`block text-xs font-black ${isDark ? 'text-teal-400' : 'text-slate-700'}`}>
+                            {isRtl ? 'رقم السجل المدني لمدير المدرسة:' : 'Principal Civil ID:'}
+                          </label>
+                          <div className="relative">
+                            <User className="absolute top-3.5 right-3.5 w-4.5 h-4.5 text-slate-400" />
+                            <input
+                              type="text"
+                              value={enteredCivilId}
+                              onChange={(e) => {
+                                setEnteredCivilId(e.target.value.replace(/\D/g, '').slice(0, 10));
+                                setLoginError('');
+                              }}
+                              placeholder={isRtl ? 'أدخل رقم السجل المدني المكون من 10 أرقام...' : 'Enter 10-digit Civil ID...'}
+                              className={`w-full pr-11 pl-4 py-3 rounded-xl outline-none border transition-all text-sm font-bold ${
+                                isDark ? 'bg-[#0b2336] border-teal-800/40 text-white focus:border-indigo-400' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'
+                              }`}
+                              required
+                            />
+                          </div>
+                        </div>
 
-                      if (matched) {
-                        setSelectedSchoolData(matched);
-                        const c = matched.ministryCode || (matched as any).code || '45013';
-                        setSchoolCode(c);
+                        <button
+                          type="button"
+                          disabled={isRetrieving || enteredCivilId.length < 10}
+                          onClick={() => {
+                            setIsRetrieving(true);
+                            setLoginError('');
+                            setTimeout(() => {
+                              // Simulate searching schools by principal ID or name
+                              // In this mock, we'll find schools where the ID matches or just return some for demo
+                              const found = activeSchools.filter(s => (s as any).principalId === enteredCivilId || (s as any).nationalId === enteredCivilId);
+                              
+                              if (found.length > 0) {
+                                setRetrievedSchools(found);
+                                setRetrievalStatus('success');
+                                const first = found[0];
+                                setPrincipalName((first as any).principalName || first.customFields?.['اسم مدير المدرسة'] || 'أ. مدير المدرسة');
+                                setPrincipalMobile((first as any).principalMobile || (first as any).mobile || '0550000000');
+                                setSchoolCode(first.ministryCode || (first as any).code || '45013');
+                                setSchoolName(first.nameAr);
+                              } else {
+                                setRetrievalStatus('error');
+                                setLoginError(isRtl ? 'عفواً، لم يتم العثور على أي مدارس مرتبطة بهذا السجل المدني في النظام.' : 'No schools found for this Civil ID.');
+                              }
+                              setIsRetrieving(false);
+                            }, 1200);
+                          }}
+                          className={`w-full py-3.5 rounded-xl font-black text-sm shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 ${
+                            isRetrieving || enteredCivilId.length < 10
+                              ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-50'
+                              : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20'
+                          }`}
+                        >
+                          {isRetrieving ? (
+                            <>
+                              <Loader2 className="w-5 h-5 animate-spin" />
+                              <span>{isRtl ? 'جاري استدعاء البيانات...' : 'Retrieving Data...'}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Database className="w-5 h-5" />
+                              <span>{isRtl ? 'استدعاء البيانات والمطابقة الرسمية' : 'Retrieve Data & Match'}</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
 
-                        // Auto-retrieve principal name from file / customFields or generated default
-                        const retrievedName = (matched as any).principalName || 
-                          matched.customFields?.['اسم مدير المدرسة'] || 
-                          matched.customFields?.['اسم مدير/ة المدرسة'] || 
-                          matched.customFields?.['اسم المدير'] || 
-                          matched.customFields?.['المدير'] || 
-                          `أ. مدير ${matched.nameAr}`;
-                        setPrincipalName(retrievedName);
-
-                        // Auto-retrieve principal mobile from file / customFields or generated default
-                        const retrievedMobile = (matched as any).principalMobile || 
-                          (matched as any).mobile || 
-                          matched.customFields?.['رقم الجوال'] || 
-                          matched.customFields?.['الجوال'] || 
-                          `055${(c + '0000000').slice(0, 7)}`;
-                        setPrincipalMobile(retrievedMobile);
-                      } else {
-                        setSelectedSchoolData(null);
-                        if (code) setSchoolCode(code);
-                      }
-                      
-                      // Reset confirmation state and passwords on changing school selection
-                      setIsSchoolDataConfirmed(false);
-                      setPassword('');
-                      setConfirmPassword('');
-                      setEnteredCivilId('');
-                      setCivilIdErrorMsg('');
-                    }}
-                    label={principalAuthMode === 'register'
-                      ? (isRtl ? '1. اسم المدرسة (اختر لاستدعاء السجل رسمياً من الملف)' : '1. Select School (Fetches record automatically)')
-                      : (isRtl ? 'اسم المدرسة (البحث الذكي عالي التحسس)' : 'School Name')}
-                    required
-                    isDark={isDark}
-                    isRtl={isRtl}
-                    placeholder={isRtl ? '🔍 اكتب اسم المدرسة أو الرقم الوزاري للفرز الفوري...' : 'Type school name or ministerial code...'}
-                    helperText={principalAuthMode === 'register'
-                      ? (isRtl ? '⚡ بمجرد كتابة وتحديد المدرسة، يستدعي النظام تلقائياً كافة بياناتها من الملف المرفق في التطبيق لمراجعتها وتأكيدها.' : 'Automatically fetches official school metadata upon selection.')
-                      : (isRtl ? '⚡ قائمة منسدلة ذكية تتأثر مباشرة بحالة تحسس الأحرف للبحث السريع عن كافة مدارس المنطقة.' : 'Smart dropdown search.')}
-                  />
-                </div>
-
-                {/* LOGIN MODE ONLY FIELDS */}
-                {principalAuthMode === 'login' && (
-                  <div className="space-y-1.5" id="form-group-login-password">
-                    <div className="flex items-center justify-between">
-                      <label className={`block text-xs font-extrabold ${isDark ? 'text-teal-300' : 'text-slate-700'}`}>
-                        {isRtl ? 'الرقم السري' : 'Secret Key / Password'} <span className="text-red-500">*</span>
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPrincipalAuthMode('forgot_password');
-                          setPrincipalForgotStep(1);
-                          setLoginError('');
-                          setPrincipalForgotSuccessMsg('');
-                        }}
-                        className="text-xs font-bold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 underline cursor-pointer"
+                    {/* Step 2: Confirmation UI */}
+                    {retrievalStatus === 'success' && retrievedSchools.length > 0 && !isSchoolDataConfirmed && !isPrincipalRegistrationCancelled && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className={`p-5 rounded-2xl border-2 border-indigo-200 dark:border-indigo-800/40 ${isDark ? 'bg-[#092233]' : 'bg-indigo-50/50'} space-y-4`}
                       >
-                        {isRtl ? '🔑 نسيت كلمة المرور؟' : 'Forgot Password?'}
-                      </button>
-                    </div>
-                    <div className="relative">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder={isRtl ? 'أدخل الرقم السري...' : 'Enter secret key...'}
-                        className={`w-full px-4 py-3 text-sm font-medium rounded-xl outline-none transition-all focus:ring-2 ${
-                          isDark
-                            ? 'bg-[#0b2336] border-teal-800/50 text-white focus:border-emerald-400 focus:bg-[#061c24] focus:ring-emerald-950'
-                            : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-emerald-500 focus:bg-white focus:ring-emerald-100'
-                        }`}
-                        required
-                        id="principal-login-password"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute inset-y-0 left-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                        <div className="flex items-center gap-2 border-b border-indigo-100 dark:border-indigo-800/20 pb-3">
+                          <ShieldCheck className="w-5 h-5 text-indigo-500" />
+                          <span className={`text-sm font-black ${isDark ? 'text-white' : 'text-indigo-900'}`}>
+                            {isRtl ? 'البيانات الرسمية المستدعاة:' : 'Official Retrieved Data:'}
+                          </span>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center text-[11px] font-bold">
+                            <span className="text-slate-500">{isRtl ? 'اسم المدير:' : 'Principal Name:'}</span>
+                            <span className={isDark ? 'text-indigo-300' : 'text-indigo-900'}>{principalName}</span>
+                          </div>
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] text-slate-500 font-bold">{isRtl ? 'المدارس المرتبطة بك:' : 'Linked Schools:'}</span>
+                            <div className="max-h-32 overflow-y-auto space-y-1.5 pr-1">
+                              {retrievedSchools.map((s, idx) => (
+                                <div key={idx} className={`p-2 rounded-lg text-[10px] font-bold border ${isDark ? 'bg-[#0b2a3f] border-teal-800/30 text-teal-200' : 'bg-white border-slate-200 text-slate-700'}`}>
+                                  {s.nameAr} ({s.ministryCode || s.code})
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setIsSchoolDataConfirmed(true)}
+                            className="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                            <span>{isRtl ? 'تأكيد البيانات' : 'Confirm Data'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsPrincipalRegistrationCancelled(true)}
+                            className="py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <XCircle className="w-4 h-4" />
+                            <span>{isRtl ? 'إلغاء (بيانات خاطئة)' : 'Cancel (Wrong Data)'}</span>
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Step 3: Registration Cancelled (Support Number) */}
+                    {isPrincipalRegistrationCancelled && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className={`p-6 rounded-2xl text-center space-y-4 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}
                       >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
+                        <div className="inline-flex p-3 rounded-full bg-indigo-100 text-indigo-600 mb-2">
+                          <User className="w-8 h-8" />
+                        </div>
+                        <h3 className={`text-lg font-black ${isDark ? 'text-white' : 'text-slate-800'}`}>
+                          {isRtl ? 'مرحباً بك سعادة مدير المدرسة' : 'Welcome School Principal'}
+                        </h3>
+                        <p className={`text-xs font-bold leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                          {isRtl 
+                            ? 'نأسف لوجود خطأ في بياناتك المسجلة. لتعديل البيانات وتصحيح الارتباط بالمدارس، نرجو منكم التواصل مع مسؤول النظام.'
+                            : 'We apologize for the data discrepancy. To correct your records and school links, please contact the system administrator.'}
+                        </p>
+                        <div className="p-4 rounded-xl bg-indigo-600 text-white shadow-lg">
+                          <span className="block text-[10px] opacity-80 mb-1">{isRtl ? 'رقم مسؤول النظام للدعم الفني:' : 'System Admin Support Number:'}</span>
+                          <span className="text-xl font-black tracking-widest">0551112222</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsPrincipalRegistrationCancelled(false);
+                            setRetrievedSchools([]);
+                            setRetrievalStatus('idle');
+                            setEnteredCivilId('');
+                          }}
+                          className="text-xs font-black text-indigo-600 underline"
+                        >
+                          {isRtl ? 'العودة للمحاولة مرة أخرى' : 'Back to try again'}
+                        </button>
+                      </motion.div>
+                    )}
+
+                    {/* Step 4: Password Setup */}
+                    {isSchoolDataConfirmed && !isPrincipalRegistrationCancelled && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="space-y-4"
+                      >
+                        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-200 flex items-center justify-between gap-2 text-xs font-black">
+                          <div className="flex items-center gap-1.5">
+                            <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <span>{isRtl ? '✓ تم تأكيد مطابقة بيانات المدارس' : '✓ School Data Matched'}</span>
+                          </div>
+                          <button type="button" onClick={() => setIsSchoolDataConfirmed(false)} className="text-[10px] underline">{isRtl ? 'تغيير' : 'Change'}</button>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className={`block text-xs font-black ${isDark ? 'text-teal-400' : 'text-slate-700'}`}>
+                            {isRtl ? 'كلمة السر الموحدة (لجميع مدارس مدير المدرسة):' : 'Unified Password (For all your schools):'}
+                          </label>
+                          <input
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="********"
+                            className={`w-full px-4 py-3 rounded-xl outline-none border transition-all text-sm font-bold ${
+                              isDark ? 'bg-[#0b2336] border-teal-800/40 text-white focus:border-indigo-400' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'
+                            }`}
+                            required
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className={`block text-xs font-black ${isDark ? 'text-teal-400' : 'text-slate-700'}`}>
+                            {isRtl ? 'تأكيد كلمة السر الموحدة:' : 'Confirm Unified Password:'}
+                          </label>
+                          <input
+                            type="password"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            placeholder="********"
+                            className={`w-full px-4 py-3 rounded-xl outline-none border transition-all text-sm font-bold ${
+                              isDark ? 'bg-[#0b2336] border-teal-800/40 text-white focus:border-indigo-400' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'
+                            }`}
+                            required
+                          />
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
+                        >
+                          <ShieldCheck className="w-5 h-5" />
+                          <span>{isRtl ? 'إكمال التسجيل والدخول للنظام' : 'Complete Registration & Sign In'}</span>
+                        </button>
+                      </motion.div>
+                    )}
                   </div>
+                )}
+
+                {/* LOGIN MODE FIELDS */}
+                {principalAuthMode === 'login' && (
+                  <>
+                    {/* 1. اسم المدرسة - اختيار واستدعاء البيانات التلقائي من السجل المرفق */}
+                    <div className="space-y-1.5" id="form-group-school-name">
+                      <SchoolSelectDropdown
+                        schools={activeSchools}
+                        value={schoolName}
+                        onChange={(name, code, schoolObj) => {
+                          setSchoolName(name);
+                          
+                          // Auto-retrieve school object from activeSchools dataset
+                          const matched = schoolObj || activeSchools.find(s => 
+                            s.nameAr.trim().toLowerCase() === name.trim().toLowerCase() ||
+                            (code && (s.ministryCode === code || (s as any).code === code))
+                          );
+
+                          if (matched) {
+                            setSelectedSchoolData(matched);
+                            const c = matched.ministryCode || (matched as any).code || '45013';
+                            setSchoolCode(c);
+
+                            // Auto-retrieve principal name from file / customFields or generated default
+                            const retrievedName = (matched as any).principalName || 
+                              matched.customFields?.['اسم مدير المدرسة'] || 
+                              matched.customFields?.['اسم مدير/ة المدرسة'] || 
+                              matched.customFields?.['اسم المدير'] || 
+                              matched.customFields?.['المدير'] || 
+                              `أ. مدير ${matched.nameAr}`;
+                            setPrincipalName(retrievedName);
+
+                            // Auto-retrieve principal mobile from file / customFields or generated default
+                            const retrievedMobile = (matched as any).principalMobile || 
+                              (matched as any).mobile || 
+                              matched.customFields?.['رقم الجوال'] || 
+                              matched.customFields?.['الجوال'] || 
+                              `055${(c + '0000000').slice(0, 7)}`;
+                            setPrincipalMobile(retrievedMobile);
+                          } else {
+                            setSelectedSchoolData(null);
+                            if (code) setSchoolCode(code);
+                          }
+                          
+                          // Reset confirmation state and passwords on changing school selection
+                          setIsSchoolDataConfirmed(false);
+                          setPassword('');
+                          setConfirmPassword('');
+                          setEnteredCivilId('');
+                          setCivilIdErrorMsg('');
+                        }}
+                        label={isRtl ? 'اسم المدرسة (البحث الذكي عالي التحسس):' : 'School Name (Smart Search):'}
+                        required
+                        isDark={isDark}
+                        isRtl={isRtl}
+                        placeholder={isRtl ? '🔍 اكتب اسم المدرسة أو الرقم الوزاري للفرز الفوري...' : 'Type school name or ministerial code...'}
+                        helperText={isRtl ? '⚡ قائمة منسدلة ذكية تتأثر مباشرة بحالة تحسس الأحرف للبحث السريع عن كافة مدارس المنطقة.' : 'Smart dropdown search.'}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5" id="form-group-login-password">
+                      <div className="flex items-center justify-between">
+                        <label className={`block text-xs font-extrabold ${isDark ? 'text-teal-300' : 'text-slate-700'}`}>
+                          {isRtl ? 'الرقم السري' : 'Secret Key / Password'} <span className="text-red-500">*</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPrincipalAuthMode('forgot_password');
+                            setPrincipalForgotStep(1);
+                            setLoginError('');
+                            setPrincipalForgotSuccessMsg('');
+                          }}
+                          className="text-xs font-bold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 underline cursor-pointer"
+                        >
+                          {isRtl ? '🔑 نسيت كلمة المرور؟' : 'Forgot Password?'}
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder={isRtl ? 'أدخل الرقم السري...' : 'Enter secret key...'}
+                          className={`w-full px-4 py-3 text-sm font-medium rounded-xl outline-none transition-all focus:ring-2 ${
+                            isDark
+                              ? 'bg-[#0b2336] border-teal-800/50 text-white focus:border-emerald-400 focus:bg-[#061c24] focus:ring-emerald-950'
+                              : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-emerald-500 focus:bg-white focus:ring-emerald-100'
+                          }`}
+                          required
+                          id="principal-login-password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute inset-y-0 left-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm rounded-xl shadow-lg shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
+                    >
+                      <LogIn className="w-5 h-5" />
+                      <span>{isRtl ? 'تسجيل الدخول للمدرسة' : 'School Login'}</span>
+                    </button>
+                  </>
                 )}
 
                 {/* FORGOT PASSWORD MODE FOR PRINCIPAL */}
