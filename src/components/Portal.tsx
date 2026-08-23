@@ -874,9 +874,9 @@ export default function Portal({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 pt-4 font-black text-sm text-cyan-600 group-hover:gap-2.5 transition-all">
+                <div className="flex items-center gap-2 pt-4 font-black text-base text-cyan-600 group-hover:gap-3 transition-all">
                   <span>{st('roleMapAction', isRtl ? 'زيارة الخارطة الآن' : 'Visit Map Now')}</span>
-                  {isRtl ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                  {isRtl ? <ArrowLeft className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />}
                 </div>
               </motion.div>
 
@@ -912,9 +912,9 @@ export default function Portal({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 pt-4 font-black text-sm text-blue-600 group-hover:gap-2.5 transition-all">
-                  <span>{isRtl ? 'بدء الخدمة الآن' : 'Start Service'}</span>
-                  {isRtl ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                <div className="flex items-center gap-2 pt-4 font-black text-base text-blue-600 group-hover:gap-3 transition-all">
+                  <span>{isRtl ? 'بدء الخدمة الآن' : 'Start Service Now'}</span>
+                  {isRtl ? <ArrowLeft className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />}
                 </div>
               </motion.div>
 
@@ -954,9 +954,9 @@ export default function Portal({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 pt-4 font-black text-sm text-emerald-600 group-hover:gap-2.5 transition-all">
-                  <span>{isRtl ? 'تسجيل دخول للمدرسة' : 'School Sign In'}</span>
-                  {isRtl ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                <div className="flex items-center gap-2 pt-4 font-black text-base text-emerald-600 group-hover:gap-3 transition-all">
+                  <span>{isRtl ? 'تسجيل الدخول للمدرسة' : 'School Login'}</span>
+                  {isRtl ? <ArrowLeft className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />}
                 </div>
               </motion.div>
 
@@ -992,9 +992,9 @@ export default function Portal({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 pt-4 font-black text-sm text-indigo-600 group-hover:gap-2.5 transition-all">
+                <div className="flex items-center gap-2 pt-4 font-black text-base text-indigo-600 group-hover:gap-3 transition-all">
                   <span>{isRtl ? 'تسجيل الدخول لمنسوبي الإدارة' : 'Department Staff Login'}</span>
-                  {isRtl ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                  {isRtl ? <ArrowLeft className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />}
                 </div>
               </motion.div>
 
