@@ -825,15 +825,15 @@ export default function Portal({
           key="portal-selection"
           className="my-auto space-y-6 sm:space-y-8 max-w-6xl mx-auto px-4 w-full animate-fade-in"
         >
-            {/* Header Title */}
-            <div className="text-center max-w-3xl mx-auto space-y-2 sm:space-y-3">
-              <h1 className={`text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight leading-tight transition-colors ${
+            {/* Header Title - Moved down and enlarged for better balance */}
+            <div className="text-center max-w-3xl mx-auto space-y-3 sm:space-y-4 pt-4 sm:pt-8 mb-4 sm:mb-8">
+              <h1 className={`text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight transition-colors ${
                 isDark ? 'text-white' : 'text-slate-800'
               }`}>
                 {t.portalTitle}
               </h1>
-              <p className={`text-xs sm:text-sm lg:text-base font-semibold max-w-2xl mx-auto leading-relaxed transition-colors ${
-                isDark ? 'text-teal-200/90' : 'text-slate-600'
+              <p className={`text-sm sm:text-base lg:text-lg font-bold max-w-2xl mx-auto leading-relaxed transition-colors ${
+                isDark ? 'text-teal-300' : 'text-slate-600'
               }`}>
                 {t.portalSubtitle}
               </p>

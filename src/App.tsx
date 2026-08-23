@@ -611,28 +611,26 @@ export default function App() {
       />
       
       {/* Floating Action Buttons Matching Requested Adjustments */}
-      {/* 1. Right Side: Back to Main Gateway */}
+      {/* 1. Right Side: Back to Main Gateway - Compact Size */}
       {(userRole !== 'portal' || portalView !== 'selection') && (
         <button
           onClick={handleReturnToMainGateway}
-          className="fixed bottom-6 right-6 sm:right-8 z-40 bg-[#16222f] hover:bg-[#1f2f42] text-white font-bold text-xs px-3.5 py-2 rounded-2xl shadow-2xl border border-slate-700/80 flex items-center gap-1.5 transition-all duration-300 active:scale-95 cursor-pointer backdrop-blur-md hover:shadow-slate-900/40"
+          className="fixed bottom-4 right-4 z-40 bg-[#16222f]/90 hover:bg-[#1f2f42] text-white font-bold text-[10px] px-2.5 py-1.5 rounded-xl shadow-xl border border-slate-700/80 flex items-center gap-1.5 transition-all duration-300 active:scale-95 cursor-pointer backdrop-blur-md"
           title={currentLang === 'ar' ? 'الشاشة الرئيسية' : 'Home Page'}
         >
-          <span>{currentLang === 'ar' ? 'الشاشة الرئيسية' : 'Home Page'}</span>
-          <div className="flex items-center justify-center p-1 rounded-lg bg-slate-800/90 border border-slate-600/60 text-emerald-400">
-            <Home className="w-3.5 h-3.5" />
-          </div>
+          <span>{currentLang === 'ar' ? 'الرئيسية' : 'Home'}</span>
+          <Home className="w-3.5 h-3.5 text-emerald-400" />
         </button>
       )}
 
-      {/* 2. Left Side: Go Back Button */}
+      {/* 2. Left Side: Go Back Button - Compact Size */}
       {(userRole !== 'portal' || portalView !== 'selection' || historyStackRef.current.length > 0) && (
         <button
           onClick={handleGoBack}
-          className="fixed bottom-12 left-3 sm:left-4 z-40 bg-[#16222f] hover:bg-[#1f2f42] text-white font-bold text-xs px-3.5 py-2 rounded-2xl shadow-2xl border border-slate-700/70 flex items-center gap-1.5 transition-all duration-300 active:scale-95 cursor-pointer backdrop-blur-md"
+          className="fixed bottom-4 left-4 z-40 bg-[#16222f]/90 hover:bg-[#1f2f42] text-white font-bold text-[10px] px-2.5 py-1.5 rounded-xl shadow-xl border border-slate-700/70 flex items-center gap-1.5 transition-all duration-300 active:scale-95 cursor-pointer backdrop-blur-md"
           title={currentLang === 'ar' ? 'عودة للخلف' : 'Go Back'}
         >
-          <span>{currentLang === 'ar' ? 'عودة للخلف' : 'Go Back'}</span>
+          <span>{currentLang === 'ar' ? 'عودة' : 'Back'}</span>
           <RotateCcw className="w-3.5 h-3.5 text-cyan-300" />
         </button>
       )}
@@ -640,11 +638,11 @@ export default function App() {
       {/* 3. Left Side: Contact Feedback Pill (smaller and pinned directly to the bottom-left corner) */}
       <button
         onClick={() => setIsFeedbackModalOpen(true)}
-        className="fixed bottom-2 left-3 sm:left-4 z-40 bg-white/95 dark:bg-slate-800/95 text-teal-800 dark:text-teal-200 hover:bg-teal-50 dark:hover:bg-slate-700 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-full shadow-md border border-teal-200/80 dark:border-teal-700/50 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+        className="fixed bottom-1 left-1 z-40 bg-white/90 dark:bg-slate-800/90 text-teal-800 dark:text-teal-200 hover:bg-teal-50 dark:hover:bg-slate-700 font-bold text-[9px] px-2 py-0.5 rounded-lg shadow-sm border border-teal-200/50 dark:border-teal-700/30 flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
         title={currentLang === 'ar' ? 'للتواصل وإبداء الملاحظات' : 'Contact & Feedback'}
       >
-        <MessageSquareHeart className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-        <span>{currentLang === 'ar' ? 'للتواصل وإبداء الملاحظات' : 'Contact & Feedback'}</span>
+        <MessageSquareHeart className="w-3 h-3 text-teal-600 dark:text-teal-400" />
+        <span>{currentLang === 'ar' ? 'تواصل معنا' : 'Contact Us'}</span>
       </button>
     </div>
   );
