@@ -21,10 +21,13 @@ import {
   Smile,
   Meh,
   Frown,
-  ChevronDown
+  ChevronDown,
+  FileText
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { SurveyResponse, ProblemType } from '../types';
+import { OfficialReportModal } from './OfficialReportModal';
+import { ReportExportData } from '../utils/reportExporter';
 
 interface BeneficiarySatisfactionViewProps {
   surveys: SurveyResponse[];
@@ -45,6 +48,8 @@ export default function BeneficiarySatisfactionView({
   const [stageFilter, setStageFilter] = useState<string>('all');
   const [onlyWithNotes, setOnlyWithNotes] = useState<boolean>(false);
   const [selectedSurveyNote, setSelectedSurveyNote] = useState<SurveyResponse | null>(null);
+  const [showOfficialModal, setShowOfficialModal] = useState<boolean>(false);
+  const [officialReportData, setOfficialReportData] = useState<ReportExportData | null>(null);
 
   // Helper translations
   const getProblemName = (problemType: ProblemType | string): string => {
@@ -266,6 +271,63 @@ export default function BeneficiarySatisfactionView({
     });
   }, [surveys, searchQuery, genderFilter, ratingFilter, stageFilter, onlyWithNotes]);
 
+  // Open Official Admissions Unit Satisfaction Report Modal (PDF / Word / Excel / ZIP)
+  const handleOpenSatisfactionOfficialReport = () => {
+    const reportData: ReportExportData = {
+      meta: {
+        title: isRtl ? 'تقرير قياس رضا المستفيدين وجودة خدمات القبول' : 'Beneficiary Satisfaction & Quality Report',
+        subtitle: '',
+        reportNumber: `SAT-REP-${Date.now().toString().slice(-6)}`,
+        hijriDate: new Date().toLocaleDateString('ar-SA'),
+        gregorianDate: new Date().toLocaleDateString('en-CA'),
+        department: isRtl ? 'وحدة القبول - رعاية المستفيدين' : 'Admissions Unit - Beneficiary Care',
+        preparer: isRtl ? 'مشرف جودة تجربة المستفيد' : 'Beneficiary Experience Supervisor',
+        approver: isRtl ? 'رئيس وحدة القبول - منصور صياح الميموني' : 'Head of Admissions - Mansour Al-Maimouni'
+      },
+      orientation: 'auto',
+      summaryItems: [
+        { label: isRtl ? 'إجمالي المقيمين' : 'Total Rated', value: stats.ratedCount },
+        { label: isRtl ? 'متوسط الرضا العام' : 'Average Rating', value: `${stats.avgOverall} / 5 (${stats.overallPct}%)` },
+        { label: isRtl ? 'رضا البنين' : 'Boys Rating', value: `${stats.boysAvgSatisfaction} / 5` },
+        { label: isRtl ? 'رضا البنات' : 'Girls Rating', value: `${stats.girlsAvgSatisfaction} / 5` }
+      ],
+      columns: [
+        { header: isRtl ? 'رقم المعاملة' : 'Request ID', key: 'id', widthPercent: 12 },
+        { header: isRtl ? 'المستفيد' : 'Beneficiary', key: 'beneficiaryName', widthPercent: 20 },
+        { header: isRtl ? 'الجوال' : 'Phone', key: 'phoneNumber', widthPercent: 12 },
+        { header: isRtl ? 'المدرسة' : 'School', key: 'schoolName', widthPercent: 20 },
+        { header: isRtl ? 'تقييم الاستقبال' : 'Reception Rating', key: 'reception', widthPercent: 12 },
+        { header: isRtl ? 'تقييم الموظف' : 'Staff Rating', key: 'staff', widthPercent: 12 },
+        { header: isRtl ? 'الموظف المسؤول' : 'Staff Name', key: 'serviceEmployee', widthPercent: 12 }
+      ],
+      rows: filteredSurveys.map(s => ({
+        id: s.id,
+        beneficiaryName: s.beneficiaryName || '-',
+        phoneNumber: s.phoneNumber || '-',
+        schoolName: s.schoolName || '-',
+        reception: s.receptionSatisfaction ? `${s.receptionSatisfaction} ★` : '-',
+        staff: s.staffSatisfaction ? `${s.staffSatisfaction} ★` : '-',
+        serviceEmployee: s.serviceEmployee || '-'
+      })),
+      narrativeText: [
+        isRtl
+          ? 'يوضح هذا التقرير مخرجات استطلاع آراء أولياء الأمور والمستفيدين من خدمات وحدة القبول والتسجيل بتعليم المدينة المنورة، ويهدف إلى قياس مدى جودة التفاعل والرد السريع وتسكين الطلاب.'
+          : 'This report summarizes the feedback collected from parents and beneficiaries regarding admissions services in Al-Madinah Directorate.',
+        isRtl
+          ? `حقق مستوى الرضا العام نسبة استثنائية بلغت ${stats.overallPct}% بمتوسط عام ${stats.avgOverall} من 5 درجات، مما يعكس تميز إجراءات القبول وسرعة معالجة الطلبات.`
+          : `Overall satisfaction achieved ${stats.overallPct}% with an average of ${stats.avgOverall}/5.`
+      ],
+      recommendations: [
+        isRtl ? 'مواصلة التحفيز والتكريم للموظفين والموظفات الحاصلين على أعلى معدلات الرضا.' : 'Recognize top-performing staff in beneficiary satisfaction.',
+        isRtl ? 'الاستجابة الفورية لكافة الملاحظات والمقترحات المسجلة من أولياء الأمور.' : 'Swiftly follow up on all parent feedback and suggestions.',
+        isRtl ? 'أتمتة إشعارات التسكين لتقليل الحاجة للمراجعات الحضورية.' : 'Automate placement notifications to reduce physical visits.'
+      ]
+    };
+
+    setOfficialReportData(reportData);
+    setShowOfficialModal(true);
+  };
+
   // Export to Excel with complete RTL support
   const handleExportExcel = () => {
     const dataRows = filteredSurveys.map((s, idx) => {
@@ -371,18 +433,25 @@ export default function BeneficiarySatisfactionView({
 
           <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
             <button
-              onClick={handleExportExcel}
-              className="px-5 py-3 bg-white text-slate-900 hover:bg-amber-50 font-black text-xs sm:text-sm rounded-2xl shadow-lg transition-all cursor-pointer flex items-center gap-2 active:scale-95 border border-white"
+              onClick={handleOpenSatisfactionOfficialReport}
+              className="px-5 py-3 bg-gradient-to-r from-amber-400 to-yellow-300 hover:from-amber-300 hover:to-yellow-200 text-slate-950 font-black text-xs sm:text-sm rounded-2xl shadow-xl transition-all cursor-pointer flex items-center gap-2 active:scale-95 border border-amber-200"
             >
-              <Download className="w-4 h-4 text-emerald-600" />
-              <span>تصدير تقرير الإكسل (RTL) 📊</span>
+              <FileText className="w-4.5 h-4.5 text-slate-950" />
+              <span>استخراج تقرير الرضا (PDF / Word / Excel) 📑</span>
             </button>
             <button
-              onClick={() => window.print()}
-              className="px-4 py-3 bg-white/15 hover:bg-white/25 text-white font-bold text-xs rounded-2xl border border-white/20 shadow-md transition-all cursor-pointer flex items-center gap-2"
+              onClick={handleExportExcel}
+              className="px-4 py-3 bg-white/20 hover:bg-white/30 text-white font-bold text-xs sm:text-sm rounded-2xl shadow-md transition-all cursor-pointer flex items-center gap-2 active:scale-95 border border-white/30"
+            >
+              <Download className="w-4 h-4 text-white" />
+              <span>إكسل سريع</span>
+            </button>
+            <button
+              onClick={handleOpenSatisfactionOfficialReport}
+              className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-2xl border border-white/20 shadow-md transition-all cursor-pointer flex items-center gap-2"
             >
               <Printer className="w-4 h-4 text-amber-200" />
-              <span>طباعة التقرير</span>
+              <span>معاينة رسمية 🖨️</span>
             </button>
           </div>
         </div>
@@ -943,6 +1012,15 @@ export default function BeneficiarySatisfactionView({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Official Admissions Unit Satisfaction Report Modal */}
+      {officialReportData && (
+        <OfficialReportModal
+          isOpen={showOfficialModal}
+          onClose={() => setShowOfficialModal(false)}
+          reportData={officialReportData}
+        />
       )}
 
     </div>

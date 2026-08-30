@@ -34,7 +34,8 @@ import {
   ThumbsUp,
   FileText,
   Bookmark,
-  Upload
+  Upload,
+  Zap
 } from 'lucide-react';
 import { Language, SurveyResponse, ProblemType, AppConfig, SchoolItem } from '../types';
 import { TRANSLATIONS, INITIAL_SCHOOLS } from '../data/mockData';
@@ -92,7 +93,7 @@ export default function SurveyForm({
   const [nationality, setNationality] = useState('سعودي');
   const [nationalitySearch, setNationalitySearch] = useState('');
   const [showNationalityDropdown, setShowNationalityDropdown] = useState(false);
-  const [residencyType, setResidencyType] = useState<'regular' | 'visit' | 'other' | ''>('regular');
+  const [residencyType, setResidencyType] = useState<'national_id' | 'residency' | 'regular' | 'visit' | 'other' | ''>('residency');
   const [customResidencyType, setCustomResidencyType] = useState('');
 
   // Service Type & Transfer Mode states
@@ -163,7 +164,7 @@ export default function SurveyForm({
     'إثيوبي', 'إريتري', 'نيجيري', 'كينيا', 'تنزانيا', 'أوغندا', 'جنوب أفريقيا', 'غانا', 'السنغال', 'مالي', 'النيجر', 'تشاد', 'الكاميرون', 'ساحل العاج', 'أنغولا', 'موزمبيق', 'مدغشقر', 'زيمبابوي', 'زامبيا', 'رواندا', 'بوروندي', 'غينيا', 'بنين', 'توغو', 'سيراليون', 'ليبيريا',
     'أسترالي', 'نيوزيلندي', 'فيجي', 'بابوا غينيا الجديدة',
     'أرميني', 'أذربيجاني', 'جورجي', 'كامبودي', 'لاوسي', 'ميانماري', 'تيمور الشرقية',
-    'ألباني', 'أندوري', 'بيلاروسي', 'مقدوني', 'مولدوفي', 'موناكو', 'سان مارينو', 'فاتيكان',
+    'أندوري', 'بيلاروسي', 'مقدوني', 'مولدوفي', 'موناكو', 'سان مارينو', 'فاتيكان',
     'أنتيغوا وبربودا', 'جزر البهاما', 'بربادوس', 'بليز', 'دومينيكا', 'غرينادا', 'غويانا', 'هايتي', 'سانت كيتس ونيفيس', 'سانت لوسيا', 'سانت فنسنت وغرينادين', 'سورينام', 'ترينيداد وتوباغو',
     'بوتسوانا', 'بوركينا فاسو', 'الرأس الأخضر', 'جمهورية أفريقيا الوسطى', 'جمهورية الكونغو الديمقراطية', 'جمهورية الكونغو', 'غينيا الاستوائية', 'الغابون', 'غامبيا', 'غينيا بيساو', 'ليسوتو', 'مالاوي', 'موريشيوس', 'ناميبيا', 'سيشل', 'جنوب السودان', 'إسواتيني'
   ];
@@ -326,6 +327,40 @@ export default function SurveyForm({
     }
   };
 
+  // Temporary Auto-Fill Demo Handler
+  const handleDemoAutoFill = () => {
+    setBeneficiaryName('فيصل');
+    setParentName('عامر');
+    setPhoneNumber('0523698541');
+    setNationality('أردني');
+    setResidencyType('residency');
+    setGender('boys');
+    setStage('Intermediate');
+    setGrade('الصف الأول المتوسط');
+    setSector('منطقة المدينة المنورة (المقر الرئيسي)');
+    setNeighborhood('قباء');
+    setSchoolName('متوسطة سعد بن خيثمة الأنصاري');
+    setSecondSchoolName('متوسطة الحسن بن علي');
+    setThirdSchoolName('متوسطة عبادة بن الصامت');
+
+    if (isTransferMode) {
+      if (requestPath === 'equivalency') {
+        setEqualizationStage('intermediate');
+        setEqualizationNotes('الاردن');
+      } else {
+        setTransferReason('school_in_same_neighborhood');
+        setContactedSchool('no');
+      }
+    } else {
+      if (studentCategoryType === 'non_fresh' && requestPath === 'equivalency') {
+        setEqualizationStage('intermediate');
+        setEqualizationNotes('الاردن');
+      }
+    }
+
+    setErrors({});
+  };
+
   // Phase 1: Form Validation
   const validatePhase1 = () => {
     const newErrors: Record<string, string> = {};
@@ -479,6 +514,15 @@ export default function SurveyForm({
         const eqStageMapped = equalizationStage === 'primary' ? 'Primary' : equalizationStage === 'intermediate' ? 'Intermediate' : equalizationStage === 'secondary' ? 'Secondary' : 'Other Qualification';
         const eqStageLabelAr = equalizationStage === 'primary' ? 'المرحلة الابتدائية' : equalizationStage === 'intermediate' ? 'المرحلة المتوسطة' : equalizationStage === 'secondary' ? 'المرحلة الثانوية' : (equalizationOtherQualification || 'مؤهل آخر');
 
+        const resolvedProblemType: ProblemType = isEq 
+          ? (equalizationStage === 'primary' ? 'cert_primary_eq' 
+             : equalizationStage === 'intermediate' ? 'cert_intermediate_eq' 
+             : equalizationStage === 'secondary' ? 'cert_secondary_eq' 
+             : 'other')
+          : (transferReason === 'registered_far_residence' || transferReason === 'school_in_same_neighborhood' 
+             ? 'distance_from_school' 
+             : 'vacancies_unavailable');
+
         const response = onSubmit({
           beneficiaryName: beneficiaryName.trim(),
           parentName: parentName.trim() || undefined,
@@ -509,7 +553,7 @@ export default function SurveyForm({
           secondSchoolName: (secondSchoolName.trim() || undefined),
           thirdSchoolName: (thirdSchoolName.trim() || undefined),
           agreedToAlternativeSchoolPlacement: isEq ? true : agreedToAlternativeSchoolPlacement,
-          problemType: isEq ? 'other' : 'unregistered_desire',
+          problemType: resolvedProblemType,
           requestType: isEq ? 'equivalency' : 'transfer',
           serviceEmployee: '',
           isResolved: false,
@@ -542,6 +586,13 @@ export default function SurveyForm({
       const eqStageMapped = equalizationStage === 'primary' ? 'Primary' : equalizationStage === 'intermediate' ? 'Intermediate' : equalizationStage === 'secondary' ? 'Secondary' : 'Other Qualification';
       const eqStageLabelAr = equalizationStage === 'primary' ? 'المرحلة الابتدائية' : equalizationStage === 'intermediate' ? 'المرحلة المتوسطة' : equalizationStage === 'secondary' ? 'المرحلة الثانوية' : (equalizationOtherQualification || 'مؤهل آخر');
 
+      const resolvedProblemType: ProblemType = isEq 
+        ? (equalizationStage === 'primary' ? 'cert_primary_eq' 
+           : equalizationStage === 'intermediate' ? 'cert_intermediate_eq' 
+           : equalizationStage === 'secondary' ? 'cert_secondary_eq' 
+           : 'other')
+        : (problemType as ProblemType);
+
       const response = onSubmit({
         beneficiaryName: beneficiaryName.trim(),
         parentName: parentName.trim() || undefined,
@@ -561,7 +612,7 @@ export default function SurveyForm({
         firstSchoolName: schoolName.trim() || undefined,
         firstSchoolCode: schoolCode.trim() || undefined,
         schoolCode: (schoolCode.trim() || undefined),
-        problemType: isEq ? 'other' : (problemType as ProblemType),
+        problemType: resolvedProblemType,
         serviceEmployee: '',
         isResolved: false,
         unresolvedReason: undefined,
@@ -1065,7 +1116,7 @@ export default function SurveyForm({
                       : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
-                  <Home className="w-4 h-4 text-slate-400" />
+                  <Home className="w-5.5 h-5.5 text-slate-400" />
                   <span>{t.goBackPortal}</span>
                 </button>
               )}
@@ -1149,7 +1200,27 @@ export default function SurveyForm({
         }`}
         id="survey-form"
       >
-        
+        {/* Temporary Quick Auto-Fill Demo Button */}
+        <div className={`p-4 rounded-2xl border flex flex-wrap items-center justify-between gap-3 shadow-sm ${
+          isDark ? 'bg-amber-950/40 border-amber-500/40 text-amber-200' : 'bg-amber-50 border-amber-300 text-amber-950'
+        }`}>
+          <div className="flex items-center gap-2.5">
+            <Zap className="w-5 h-5 text-amber-500 shrink-0" />
+            <div>
+              <span className="font-black text-xs sm:text-sm block">⚡ تعبئة بيانات تجريبية (تست مؤقت)</span>
+              <span className="text-[11px] opacity-80 font-medium">تعبئة الحقول آلياً لسهولة تجربة النموذج واكتشاف الأخطاء</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleDemoAutoFill}
+            className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2 border border-amber-400 shrink-0"
+          >
+            <Zap className="w-4 h-4 fill-slate-950" />
+            <span>تعبئة البيانات تلقائياً 🚀</span>
+          </button>
+        </div>
+
         {/* Section 1: Beneficiary Info */}
         <div>
           <div className={`flex items-center gap-2 mb-6 border-b pb-3 ${isDark ? 'border-teal-800/40' : 'border-slate-100'}`}>

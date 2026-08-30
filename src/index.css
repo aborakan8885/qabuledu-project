@@ -249,4 +249,92 @@
   opacity: 1 !important;
 }
 
+/* Fully Responsive Gateway Container & Grid with 1600px Max-Width and Fluid Clamp Typography */
+.portal-responsive-container {
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Desktop & Laptop Screens (min-width: 1025px) */
+@media (min-width: 1025px) {
+  .portal-responsive-container {
+    max-width: 1600px;
+    padding: 32px 4%;
+  }
+  .portal-responsive-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 28px;
+    width: 100%;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+}
+
+/* iPad & Tablet Screens (768px to 1024px) */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .portal-responsive-container {
+    max-width: 100%;
+    padding: 24px;
+  }
+  .portal-responsive-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    width: 100%;
+    margin: 0 auto;
+  }
+}
+
+/* Mobile Screens (max-width: 767px) */
+@media (max-width: 767px) {
+  .portal-responsive-container {
+    max-width: 100%;
+    padding: 16px 12px;
+  }
+  .portal-responsive-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    width: 100%;
+    margin: 0 auto;
+  }
+}
+
+/* Fluid Typography and Dynamic Icon Scaling with CSS clamp() */
+.clamp-portal-title {
+  font-size: clamp(1.75rem, 3.5vw, 3.25rem);
+}
+
+.clamp-portal-subtitle {
+  font-size: clamp(0.95rem, 1.4vw, 1.25rem);
+}
+
+.clamp-card-title {
+  font-size: clamp(1.1rem, 1.5vw, 1.4rem);
+}
+
+.clamp-card-badge {
+  font-size: clamp(0.8rem, 1.05vw, 0.95rem);
+}
+
+.clamp-card-desc {
+  font-size: clamp(0.875rem, 1.15vw, 1.05rem);
+}
+
+.clamp-card-action {
+  font-size: clamp(0.9rem, 1.25vw, 1.1rem);
+}
+
+.clamp-card-icon {
+  width: clamp(1.35rem, 1.8vw, 1.75rem);
+  height: clamp(1.35rem, 1.8vw, 1.75rem);
+}
+
+.portal-card-padding {
+  padding: clamp(1.15rem, 2vw, 2rem);
+}
+
+
 

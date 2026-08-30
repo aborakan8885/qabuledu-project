@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type ProblemType = 'new_registration_saudi' | 'new_registration_resident' | 'vacancies_unavailable' | 'student_density' | 'unjustified_rejection' | 'distance_from_school' | 'unregistered_desire' | 'other' | 'cert_primary_eq' | 'cert_intermediate_eq' | 'cert_secondary_eq';
+export type ProblemType = 'new_registration_saudi' | 'new_registration_resident' | 'vacancies_unavailable' | 'student_density' | 'unjustified_rejection' | 'distance_from_school' | 'unregistered_desire' | 'other' | 'cert_primary_eq' | 'cert_intermediate_eq' | 'cert_secondary_eq' | 'vacancies_closed' | 'class_density';
 
 export type RequestType = 'registration' | 'transfer' | 'equivalency';
 
@@ -22,6 +22,7 @@ export interface SurveyResponse {
   requestType?: RequestType;
   serviceEmployee?: string;
   isResolved: boolean;
+  resolvedAt?: string;
   unresolvedReason?: string;
   staffSatisfaction: number; // 1-5
   receptionSatisfaction: number; // 1-5
@@ -74,10 +75,15 @@ export interface SurveyResponse {
   // Vacancy request pipeline fields
   isVacancyRequest?: boolean;
   vacancyRequestStatus?: string;
+  referredToPlanningAt?: string;
+  submittedAt?: string;
   sentToSchoolPrincipal?: boolean;
   sentToPlanningOfficer?: boolean;
   sentToLeadership?: boolean;
   sentToLeadershipAt?: string;
+  leadershipFollowUpConfirmed?: boolean;
+  leadershipFollowUpNotes?: string;
+  leadershipFollowUpAt?: string;
   isReceived?: boolean;
   receivedAt?: string;
   leadershipCategory?: string;
@@ -123,6 +129,7 @@ export interface SurveyResponse {
   // Beneficiary Evaluation & Rating submission fields
   beneficiaryEvaluationSubmitted?: boolean;
   evaluationSubmittedAt?: string;
+  generalizeService?: 'yes' | 'no' | string;
 
   referringOfficerId?: string;
   referringOfficerName?: string;
@@ -142,6 +149,9 @@ export interface SurveyResponse {
   lastUpdatedAt?: string;
   officialSchoolName?: string;
   status?: string;
+  attachments?: Array<{ name: string; type: string; data: string; }>;
+  assignmentNotes?: string;
+  satisfaction?: number;
 }
 
 export interface AppConfig {
@@ -264,6 +274,25 @@ export interface BeneficiaryFeedback {
   createdAt: string;
   status: 'new' | 'read' | 'replied';
   notes?: string;
+}
+
+export interface ReportExportData {
+  meta: {
+    title: string;
+    subtitle: string;
+    reportNumber: string;
+    hijriDate: string;
+    gregorianDate: string;
+    department: string;
+    preparer: string;
+    approver: string;
+  };
+  orientation: 'auto' | 'portrait' | 'landscape';
+  summaryItems: { label: string; value: string | number }[];
+  columns: { header: string; key: string; widthPercent: number }[];
+  rows: any[];
+  narrativeText: string[];
+  recommendations: string[];
 }
 
 

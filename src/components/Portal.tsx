@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { verifyCivilIdMatch, extractCivilIdFromSchool, cleanDigitsString, findSchoolsByPrincipalCivilId, extractPrincipalInfoFromSchool } from '../utils/civilId';
+import { verifyCivilIdMatch, extractCivilIdFromSchool, cleanDigitsString, findSchoolsByPrincipalCivilId, extractPrincipalInfoFromSchool, extractSchoolNameFromSchool } from '../utils/civilId';
 import { AgeVerificationModal } from './AgeVerificationModal';
 import { 
   Map,
@@ -44,7 +44,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Language, SurveyResponse, AppConfig, PrincipalReport, SchoolItem } from '../types';
 import { TRANSLATIONS, INITIAL_SCHOOLS, ADMIN_UNITS, OFFICIAL_ADMINS } from '../data/mockData';
 import { SchoolSelectDropdown } from './SchoolSelectDropdown';
-import { isMatchingPrincipalSchool, getRequestTypeInfo, cleanSchoolName, normalizeArabicText, isSurveyEqualizationRequest, isSurveyTransferRequest } from '../utils/storageEngine';
+import { isMatchingPrincipalSchool, getRequestTypeInfo, cleanSchoolName, normalizeArabicText, isSurveyEqualizationRequest, isSurveyTransferRequest, DEMO_OFFICERS } from '../utils/storageEngine';
 
 import { getSafeTranslation } from '../utils/translationHelper';
 
@@ -160,6 +160,7 @@ export default function Portal({
   const [evals, setEvals] = useState<Record<string, {
     staffSatisfaction: number;
     receptionSatisfaction: number;
+    generalizeService?: string;
     notes: string;
     isResolved: boolean;
     success?: boolean;
@@ -567,18 +568,18 @@ export default function Portal({
       return `${info.label} (${info.subLabel})`;
     }
     switch (key) {
-      case 'new_registration_saudi': return isRtl ? 'تسجيل جديد (سعودي)' : 'New Registration (Saudi)';
-      case 'new_registration_resident': return isRtl ? 'تسجيل جديد (مقيم)' : 'New Registration (Resident)';
-      case 'vacancies_unavailable': return isRtl ? 'نقل طالب (طلب شاغر)' : 'Student Transfer (Vacancy)';
-      case 'student_density': return isRtl ? 'نقل طالب (كثافة بالفصول)' : 'Student Transfer (Density)';
+      case 'new_registration_saudi': return isRtl ? 'تسجيل مستجد (سعودي)' : 'New Registration (Saudi)';
+      case 'new_registration_resident': return isRtl ? 'تسجيل مستجد (مقيم)' : 'New Registration (Resident)';
+      case 'vacancies_unavailable': return isRtl ? 'طلب نقل طالب (طلب شاغر)' : 'Student Transfer (Vacancy)';
+      case 'student_density': return isRtl ? 'طلب نقل طالب (كثافة بالفصول)' : 'Student Transfer (Density)';
       case 'unjustified_rejection': return isRtl ? 'معاملة قبول (رفض دون مبرر)' : 'Admission Case (Rejection)';
-      case 'cert_primary_eq': return isRtl ? 'معادلة مؤهلات (المرحلة الابتدائية)' : 'Equivalency (Primary)';
-      case 'cert_intermediate_eq': return isRtl ? 'معادلة مؤهلات (المرحلة المتوسطة)' : 'Equivalency (Intermediate)';
-      case 'cert_secondary_eq': return isRtl ? 'معادلة مؤهلات (المرحلة الثانوية)' : 'Equivalency (Secondary)';
-      case 'distance_from_school': return isRtl ? 'نقل طالب (بعد السكن)' : 'Student Transfer (Distance)';
-      case 'unregistered_desire': return isRtl ? 'تسجيل جديد (قبول بالرغبة)' : 'New Registration (Desired)';
-      case 'vacancies_closed': return isRtl ? 'نقل طالب (شواغر مغلقة)' : 'Student Transfer (Closed)';
-      case 'class_density': return isRtl ? 'نقل طالب (كثافة فصول)' : 'Student Transfer (Density)';
+      case 'cert_primary_eq': return isRtl ? 'طلب معادلة مؤهلات (المرحلة الابتدائية)' : 'Equivalency (Primary)';
+      case 'cert_intermediate_eq': return isRtl ? 'طلب معادلة مؤهلات (المرحلة المتوسطة)' : 'Equivalency (Intermediate)';
+      case 'cert_secondary_eq': return isRtl ? 'طلب معادلة مؤهلات (المرحلة الثانوية)' : 'Equivalency (Secondary)';
+      case 'distance_from_school': return isRtl ? 'طلب نقل طالب (بعد السكن)' : 'Student Transfer (Distance)';
+      case 'unregistered_desire': return isRtl ? 'تسجيل مستجد (قبول بالرغبة)' : 'New Registration (Desired)';
+      case 'vacancies_closed': return isRtl ? 'طلب نقل طالب (شواغر مغلقة)' : 'Student Transfer (Closed)';
+      case 'class_density': return isRtl ? 'طلب نقل طالب (كثافة فصول)' : 'Student Transfer (Density)';
       default: return isRtl ? 'معاملة قبول / أخرى' : 'Admission Case / Other';
     }
   };
@@ -751,12 +752,14 @@ export default function Portal({
     const local = evals[survey.id] || {
       staffSatisfaction: survey.staffSatisfaction || 0,
       receptionSatisfaction: survey.receptionSatisfaction || 0,
+      generalizeService: (survey as any).generalizeService || 'yes',
       notes: '',
       isResolved: survey.isResolved || false,
     };
 
     const staffSat = local.staffSatisfaction > 0 ? local.staffSatisfaction : 5;
     const receptionSat = local.receptionSatisfaction > 0 ? local.receptionSatisfaction : 5;
+    const genService = local.generalizeService || 'yes';
     const userNotes = (local.notes || '').trim();
     const nowIso = new Date().toISOString();
 
@@ -764,6 +767,7 @@ export default function Portal({
       ...survey,
       staffSatisfaction: staffSat,
       receptionSatisfaction: receptionSat,
+      generalizeService: genService,
       notes: userNotes || survey.notes,
       isResolved: true,
       beneficiaryEvaluationSubmitted: true,
@@ -791,6 +795,7 @@ export default function Portal({
       [survey.id]: {
         staffSatisfaction: staffSat,
         receptionSatisfaction: receptionSat,
+        generalizeService: genService,
         notes: userNotes,
         isResolved: true,
         submitted: true,
@@ -818,56 +823,56 @@ export default function Portal({
 
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 flex-1 flex flex-col justify-center min-h-[calc(100vh-140px)]" id="portal-root">
+    <div className="w-full max-w-[1600px] mx-auto px-2 sm:px-4 lg:px-6 py-2 sm:py-6 flex-1 flex flex-col justify-center min-h-[calc(100vh-140px)]" id="portal-root">
       
       {/* VIEW 1: ROLE SELECTION LAUNCHPAD */}
       {view === 'selection' && (
         <div
           key="portal-selection"
-          className="my-auto space-y-6 sm:space-y-8 max-w-6xl mx-auto px-4 w-full animate-fade-in"
+          className="my-auto space-y-4 sm:space-y-6 portal-responsive-container w-full animate-fade-in"
         >
-            {/* Header Title - Moved down and enlarged for better balance */}
-            <div className="text-center max-w-3xl mx-auto space-y-3 sm:space-y-4 pt-4 sm:pt-8 mb-4 sm:mb-8">
-              <h1 className={`text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight transition-colors ${
+            {/* Header Title */}
+            <div className="text-center max-w-4xl mx-auto space-y-2 sm:space-y-3 pt-2 sm:pt-4 mb-3 sm:mb-6">
+              <h1 className={`clamp-portal-title font-black tracking-tight leading-tight transition-colors ${
                 isDark ? 'text-white' : 'text-slate-800'
               }`}>
                 {t.portalTitle}
               </h1>
-              <p className={`text-sm sm:text-base lg:text-lg font-bold max-w-2xl mx-auto leading-relaxed transition-colors ${
+              <p className={`clamp-portal-subtitle font-bold max-w-3xl mx-auto leading-relaxed transition-colors ${
                 isDark ? 'text-teal-300' : 'text-slate-600'
               }`}>
                 {t.portalSubtitle}
               </p>
             </div>
 
-            {/* Selection Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5 max-w-6xl mx-auto">
+            {/* Selection Grid (Fully Responsive 4x1 PC/Laptop, 2x2 iPad, 1x4 Mobile) */}
+            <div className="portal-responsive-grid">
               
               {/* Card 1: Educational Schools Map (خارطة المدارس التعليمية) */}
               <motion.div
                 whileHover={{ y: -3, scale: 1.01 }}
                 onClick={() => window.open('https://mapedumadinah.com/', '_blank')}
-                className="group relative rounded-2xl p-5 cursor-pointer transition-all flex flex-col justify-between overflow-hidden shadow-sm border bg-white border-slate-200 hover:border-cyan-500 hover:shadow-lg"
+                className="group relative rounded-2xl portal-card-padding cursor-pointer transition-all flex flex-col justify-between overflow-hidden shadow-sm border bg-white border-slate-200 hover:border-cyan-500 hover:shadow-lg h-full"
               >
                 {/* Decorative background glow */}
                 <div className="absolute top-0 right-0 w-28 h-28 rounded-full blur-3xl transition-all bg-cyan-500/5 group-hover:bg-cyan-500/10" />
                 
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   {/* Icon and Title in same box/row */}
                   <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl shadow-md border bg-cyan-600 border-cyan-500 text-white transition-transform group-hover:scale-105">
-                      <Map className="w-5 h-5" />
+                    <div className="p-2.5 sm:p-3 rounded-xl shadow-md border bg-cyan-600 border-cyan-500 text-white transition-transform group-hover:scale-105 shrink-0">
+                      <Map className="clamp-card-icon" />
                     </div>
-                    <h3 className="font-black text-lg sm:text-xl text-slate-800 transition-colors group-hover:text-cyan-700">
+                    <h3 className="clamp-card-title font-black text-slate-800 transition-colors group-hover:text-cyan-700 leading-snug">
                       {st('roleMap', isRtl ? 'خارطة المدارس التعليمية' : 'Educational Schools Map')}
                     </h3>
                   </div>
 
-                  <div className="space-y-2">
-                    <p className="text-[12px] sm:text-sm font-bold leading-relaxed text-cyan-600">
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <p className="clamp-card-badge font-bold leading-relaxed text-cyan-600">
                       {st('roleMapIndependent', isRtl ? 'رابط خارجي مستقل' : 'Independent External Link')}
                     </p>
-                    <p className="text-sm sm:text-base font-medium leading-relaxed text-slate-500">
+                    <p className="clamp-card-desc font-medium leading-relaxed text-slate-500">
                       {st('roleMapDesc', isRtl 
                         ? 'بوابة مخصصة للمستفيدين لمعرفة المدارس القريبة من المدرسة المرغوبة او المستهدفة بالمسافة للتسجيل أو النقل'
                         : 'A portal dedicated to beneficiaries to find schools near their desired or target school by distance for registration or transfer')}
@@ -875,9 +880,9 @@ export default function Portal({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 pt-4 font-black text-base text-cyan-600 group-hover:gap-3 transition-all">
+                <div className="flex items-center gap-2 pt-4 clamp-card-action font-black text-cyan-600 group-hover:gap-3 transition-all mt-auto">
                   <span>{st('roleMapAction', isRtl ? 'زيارة الخارطة الآن' : 'Visit Map Now')}</span>
-                  {isRtl ? <ArrowLeft className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />}
+                  {isRtl ? <ArrowLeft className="w-4.5 h-4.5 sm:w-5 sm:h-5" /> : <ArrowRight className="w-4.5 h-4.5 sm:w-5 sm:h-5" />}
                 </div>
               </motion.div>
 
@@ -885,27 +890,27 @@ export default function Portal({
               <motion.div
                 whileHover={{ y: -3, scale: 1.01 }}
                 onClick={() => setView('parent-choices')}
-                className="group relative rounded-2xl p-5 cursor-pointer transition-all flex flex-col justify-between overflow-hidden shadow-sm border bg-white border-slate-200 hover:border-blue-500 hover:shadow-lg"
+                className="group relative rounded-2xl portal-card-padding cursor-pointer transition-all flex flex-col justify-between overflow-hidden shadow-sm border bg-white border-slate-200 hover:border-blue-500 hover:shadow-lg h-full"
               >
                 {/* Decorative background glow */}
                 <div className="absolute top-0 right-0 w-28 h-28 rounded-full blur-3xl transition-all bg-blue-500/5 group-hover:bg-blue-500/10" />
                 
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   {/* Icon and Title in same box/row */}
                   <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl shadow-md border bg-blue-600 border-blue-500 text-white transition-transform group-hover:scale-105">
-                      <Users className="w-5 h-5" />
+                    <div className="p-2.5 sm:p-3 rounded-xl shadow-md border bg-blue-600 border-blue-500 text-white transition-transform group-hover:scale-105 shrink-0">
+                      <Users className="clamp-card-icon" />
                     </div>
-                    <h3 className="font-black text-lg sm:text-xl text-slate-800 transition-colors group-hover:text-blue-700">
+                    <h3 className="clamp-card-title font-black text-slate-800 transition-colors group-hover:text-blue-700 leading-snug">
                       {st('roleParent', isRtl ? 'مستفيد ولي أمر' : 'Parent Beneficiary')}
                     </h3>
                   </div>
 
-                  <div className="space-y-2">
-                    <p className="text-[12px] sm:text-sm font-bold leading-relaxed text-blue-600">
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <p className="clamp-card-badge font-bold leading-relaxed text-blue-600">
                       {isRtl ? 'دخول مباشر بدون حساب' : 'Direct access without registration'}
                     </p>
-                    <p className="text-sm sm:text-base font-medium leading-relaxed text-slate-500">
+                    <p className="clamp-card-desc font-medium leading-relaxed text-slate-500">
                       {st('roleParentDesc', isRtl 
                         ? 'تقديم بلاغ، استفسار أو متابعة حالة طلبات القبول والتسجيل والنقل المدرسي وتعديل الرغبات'
                         : 'Submit report, inquiry or track admission, registration and school transfer requests status')}
@@ -913,9 +918,9 @@ export default function Portal({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 pt-4 font-black text-base text-blue-600 group-hover:gap-3 transition-all">
+                <div className="flex items-center gap-2 pt-4 clamp-card-action font-black text-blue-600 group-hover:gap-3 transition-all mt-auto">
                   <span>{isRtl ? 'بدء الخدمة الآن' : 'Start Service Now'}</span>
-                  {isRtl ? <ArrowLeft className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />}
+                  {isRtl ? <ArrowLeft className="w-4.5 h-4.5 sm:w-5 sm:h-5" /> : <ArrowRight className="w-4.5 h-4.5 sm:w-5 sm:h-5" />}
                 </div>
               </motion.div>
 
@@ -927,27 +932,27 @@ export default function Portal({
                   setPrincipalAuthMode('login');
                   setLoginError('');
                 }}
-                className="group relative rounded-2xl p-5 cursor-pointer transition-all flex flex-col justify-between overflow-hidden shadow-sm border bg-white border-slate-200 hover:border-emerald-500 hover:shadow-lg"
+                className="group relative rounded-2xl portal-card-padding cursor-pointer transition-all flex flex-col justify-between overflow-hidden shadow-sm border bg-white border-slate-200 hover:border-emerald-500 hover:shadow-lg h-full"
               >
                 {/* Decorative background glow */}
                 <div className="absolute top-0 right-0 w-28 h-28 rounded-full blur-3xl transition-all bg-emerald-500/5 group-hover:bg-emerald-500/10" />
                 
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   {/* Icon and Title in same box/row */}
                   <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl shadow-md border bg-emerald-600 border-emerald-500 text-white transition-transform group-hover:scale-105">
-                      <School className="w-5 h-5" />
+                    <div className="p-2.5 sm:p-3 rounded-xl shadow-md border bg-emerald-600 border-emerald-500 text-white transition-transform group-hover:scale-105 shrink-0">
+                      <School className="clamp-card-icon" />
                     </div>
-                    <h3 className="font-black text-lg sm:text-xl text-slate-800 transition-colors group-hover:text-emerald-700">
+                    <h3 className="clamp-card-title font-black text-slate-800 transition-colors group-hover:text-emerald-700 leading-snug">
                       {st('rolePrincipal', isRtl ? 'مستفيد مدير مدرسة' : 'School Principal')}
                     </h3>
                   </div>
 
-                  <div className="space-y-2">
-                    <p className="text-[12px] sm:text-sm font-bold leading-relaxed text-emerald-600">
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <p className="clamp-card-badge font-bold leading-relaxed text-emerald-600">
                       {isRtl ? 'يتطلب رمز أمن' : 'Requires secure code'}
                     </p>
-                    <p className="text-sm sm:text-base font-medium leading-relaxed text-slate-500">
+                    <p className="clamp-card-desc font-medium leading-relaxed text-slate-500">
                       {st('rolePrincipalDesc', isRtl 
                         ? 'بوابة مخصصة لمدراء المدارس للإبلاغ عن الشواغر المتاحة وتحديث بيانات الفصول الدراسية وتأكيد رغبات القبول'
                         : 'Dedicated portal for school principals to report available vacancies, update class data, and confirm admission desires')}
@@ -955,9 +960,9 @@ export default function Portal({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 pt-4 font-black text-base text-emerald-600 group-hover:gap-3 transition-all">
+                <div className="flex items-center gap-2 pt-4 clamp-card-action font-black text-emerald-600 group-hover:gap-3 transition-all mt-auto">
                   <span>{isRtl ? 'تسجيل الدخول للمدرسة' : 'School Login'}</span>
-                  {isRtl ? <ArrowLeft className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />}
+                  {isRtl ? <ArrowLeft className="w-4.5 h-4.5 sm:w-5 sm:h-5" /> : <ArrowRight className="w-4.5 h-4.5 sm:w-5 sm:h-5" />}
                 </div>
               </motion.div>
 
@@ -965,27 +970,27 @@ export default function Portal({
               <motion.div
                 whileHover={{ y: -3, scale: 1.01 }}
                 onClick={() => setView('admin-login')}
-                className="group relative rounded-2xl p-5 cursor-pointer transition-all flex flex-col justify-between overflow-hidden shadow-sm border bg-white border-slate-200 hover:border-indigo-500 hover:shadow-lg"
+                className="group relative rounded-2xl portal-card-padding cursor-pointer transition-all flex flex-col justify-between overflow-hidden shadow-sm border bg-white border-slate-200 hover:border-indigo-500 hover:shadow-lg h-full"
               >
                 {/* Decorative background glow */}
                 <div className="absolute top-0 right-0 w-28 h-28 rounded-full blur-3xl transition-all bg-indigo-500/5 group-hover:bg-indigo-500/10" />
                 
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   {/* Icon and Title in same box/row */}
                   <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl shadow-md border bg-indigo-600 border-indigo-500 text-white transition-transform group-hover:scale-105">
-                      <ShieldCheck className="w-5 h-5" />
+                    <div className="p-2.5 sm:p-3 rounded-xl shadow-md border bg-indigo-600 border-indigo-500 text-white transition-transform group-hover:scale-105 shrink-0">
+                      <ShieldCheck className="clamp-card-icon" />
                     </div>
-                    <h3 className="font-black text-lg sm:text-xl text-slate-800 transition-colors group-hover:text-indigo-700">
+                    <h3 className="clamp-card-title font-black text-slate-800 transition-colors group-hover:text-indigo-700 leading-snug">
                       {isRtl ? 'منسوبي الإدارة' : 'Department Staff'}
                     </h3>
                   </div>
 
-                  <div className="space-y-2">
-                    <p className="text-[12px] sm:text-sm font-bold leading-relaxed text-indigo-600">
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <p className="clamp-card-badge font-bold leading-relaxed text-indigo-600">
                       {isRtl ? 'بوابة إدارة وحوكمة الأنظمة والتحليلات' : 'Administrative governance & analytics'}
                     </p>
-                    <p className="text-sm sm:text-base font-medium leading-relaxed text-slate-500">
+                    <p className="clamp-card-desc font-medium leading-relaxed text-slate-500">
                       {isRtl
                         ? 'بوابة الدخول للمصرح لهم من منسوبي الإدارة العامة للتعليم بمنطقة المدينة المنورة'
                         : 'Entry portal for authorized staff of the General Administration of Education in Madinah Region'}
@@ -993,9 +998,9 @@ export default function Portal({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 pt-4 font-black text-base text-indigo-600 group-hover:gap-3 transition-all">
+                <div className="flex items-center gap-2 pt-4 clamp-card-action font-black text-indigo-600 group-hover:gap-3 transition-all mt-auto">
                   <span>{isRtl ? 'تسجيل الدخول لمنسوبي الإدارة' : 'Department Staff Login'}</span>
-                  {isRtl ? <ArrowLeft className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />}
+                  {isRtl ? <ArrowLeft className="w-4.5 h-4.5 sm:w-5 sm:h-5" /> : <ArrowRight className="w-4.5 h-4.5 sm:w-5 sm:h-5" />}
                 </div>
               </motion.div>
 
@@ -1064,8 +1069,57 @@ export default function Portal({
               </div>
 
               {adminAuthMode === 'login' ? (
-                <form
-                  className="space-y-5"
+                <div className="space-y-6">
+                  {/* Quick Demo Login Selection as requested */}
+                  <div className={`p-4 rounded-2xl border-2 border-dashed ${
+                    isDark ? 'border-amber-500/30 bg-amber-950/10' : 'border-amber-200 bg-amber-50/50'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      <span className={`text-xs font-black ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
+                        {isRtl ? 'تجربة سريعة (يوزرات تجريبية للاختبار):' : 'Quick Demo Access (Test Users):'}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {DEMO_OFFICERS.map((demo) => (
+                        <button
+                          key={demo.id}
+                          type="button"
+                          onClick={() => {
+                            setLoginError('');
+                            localStorage.setItem('officer_authenticated_v1', 'true');
+                            localStorage.setItem('active_officer_id_v1', demo.id);
+                            if (demo.role === 'admin') {
+                               localStorage.setItem('admin_api_key', 'salim_admin_key_2026');
+                            }
+                            onSelectRole('admin');
+                          }}
+                          className={`px-3 py-2 rounded-xl text-[10px] font-bold transition-all border shadow-sm flex items-center gap-1.5 active:scale-95 cursor-pointer ${
+                            isDark 
+                              ? 'bg-[#0b2336] border-teal-800/40 text-teal-200 hover:border-amber-400 hover:text-amber-300' 
+                              : 'bg-white border-slate-200 text-slate-700 hover:border-amber-500 hover:text-amber-700'
+                          }`}
+                          title={demo.roleDescription}
+                        >
+                          <div className={`w-2 h-2 rounded-full ${
+                            demo.role === 'admin' ? 'bg-red-500' : 
+                            demo.role === 'supervisor' ? 'bg-blue-500' : 
+                            demo.role === 'school_planning' ? 'bg-amber-500' : 
+                            'bg-emerald-500'
+                          }`} />
+                          {demo.nameAr.split('(')[0].trim()}
+                        </button>
+                      ))}
+                    </div>
+                    <p className={`text-[10px] mt-3 font-medium ${isDark ? 'text-teal-400/60' : 'text-slate-400'}`}>
+                      {isRtl 
+                        ? '• اضغط على أي مسمى وظيفي أعلاه للدخول المباشر بالصلاحيات المخصصة دون كلمة مرور (لغرض التجربة).' 
+                        : '• Click any job title above for instant login with assigned permissions (for testing).'}
+                    </p>
+                  </div>
+
+                  <form
+                    className="space-y-5"
                   onSubmit={(e) => {
                     e.preventDefault();
                     const formData = new FormData(e.currentTarget);
@@ -1197,6 +1251,7 @@ export default function Portal({
                     {isRtl ? 'العودة للاختيار' : 'Back to Selection'}
                   </button>
                 </form>
+              </div>
               ) : (
                 /* ADMIN REGISTRATION FORM */
                 <div className="space-y-5">
@@ -1786,11 +1841,6 @@ export default function Portal({
                                   <Calendar className="w-5 h-5 text-amber-600 dark:text-amber-400" />
                                   <span>{isRtl ? '📅 موعد مراجعة إدارة القبول لمعادلة المؤهلات:' : '📅 Equivalency Review Appointment:'}</span>
                                 </div>
-                                {(survey as any).appointmentSetAt && (
-                                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-amber-200/70 dark:bg-amber-900/60 font-bold text-amber-900 dark:text-amber-200">
-                                    {new Date((survey as any).appointmentSetAt).toLocaleDateString(isRtl ? 'ar-SA' : 'en-US')}
-                                  </span>
-                                )}
                               </div>
 
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs font-bold">
@@ -1941,7 +1991,7 @@ export default function Portal({
                                     {/* Star 1: Staff performance */}
                                     <div className="space-y-2">
                                       <label className={`block text-xs font-extrabold ${isDark ? 'text-teal-200' : 'text-slate-700'}`}>
-                                        {isRtl ? '1. تقييم رضاك عن أداء ومساعدة الموظف المختص بالخدمة:' : '1. Satisfaction with specialized employee performance:'}
+                                        {isRtl ? '1- رضاك عن الخدمة المقدمة لك' : '1- Satisfaction with provided service'}
                                       </label>
                                       <div className="flex items-center gap-1.5">
                                         {[1, 2, 3, 4, 5].map((star) => {
@@ -1991,7 +2041,7 @@ export default function Portal({
                                     {/* Star 2: Reception quality */}
                                     <div className="space-y-2">
                                       <label className={`block text-xs font-extrabold ${isDark ? 'text-teal-200' : 'text-slate-700'}`}>
-                                        {isRtl ? '2. تقييم رضاك عن جودة الاستقبال والتوجيه والإرشاد بالإدارة:' : '2. Satisfaction with reception and guidance quality:'}
+                                        {isRtl ? '2- رضاك عن سرعة معالجة الطلب' : '2- Satisfaction with speed of request processing'}
                                       </label>
                                       <div className="flex items-center gap-1.5">
                                         {[1, 2, 3, 4, 5].map((star) => {
@@ -2041,7 +2091,54 @@ export default function Portal({
                                     {/* Additional Comments Textarea (Clean empty box without placeholder as requested) */}
                                     <div className="space-y-2">
                                       <label className={`block text-xs font-extrabold ${isDark ? 'text-teal-200' : 'text-slate-700'}`}>
-                                        {isRtl ? '3. المقترحات والملاحظات:' : '3. Suggestions & Feedback:'}
+                                       {isRtl ? '3- هل ترى تعميم الخدمة لكافة الإدارات التعليمية' : '3- Do you support generalizing the service to all educational directorates?'}
+                                       </label>
+                                       <div className="flex flex-wrap items-center gap-3 pt-1 pb-2">
+                                         <button
+                                           type="button"
+                                           onClick={() => {
+                                             setEvals(prev => ({
+                                               ...prev,
+                                               [survey.id]: {
+                                                 ...(prev[survey.id] || local),
+                                                 generalizeService: 'yes'
+                                               }
+                                             }));
+                                           }}
+                                           className={`px-5 py-2.5 rounded-2xl font-black text-xs sm:text-sm transition-all border flex items-center gap-2 cursor-pointer ${
+                                             (local.generalizeService || 'yes') === 'yes'
+                                               ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm scale-[1.02]'
+                                               : isDark ? 'bg-teal-950/40 text-slate-300 border-teal-800/40 hover:bg-teal-900/50' : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                                           }`}
+                                         >
+                                           <span>👍 {isRtl ? 'نعم، أؤيد التعميم' : 'Yes, support generalization'}</span>
+                                         </button>
+                                         <button
+                                           type="button"
+                                           onClick={() => {
+                                             setEvals(prev => ({
+                                               ...prev,
+                                               [survey.id]: {
+                                                 ...(prev[survey.id] || local),
+                                                 generalizeService: 'no'
+                                               }
+                                             }));
+                                           }}
+                                           className={`px-5 py-2.5 rounded-2xl font-black text-xs sm:text-sm transition-all border flex items-center gap-2 cursor-pointer ${
+                                             local.generalizeService === 'no'
+                                               ? 'bg-rose-600 text-white border-rose-500 shadow-sm scale-[1.02]'
+                                               : isDark ? 'bg-teal-950/40 text-slate-300 border-teal-800/40 hover:bg-teal-900/50' : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                                           }`}
+                                         >
+                                           <span>👎 {isRtl ? 'لا أؤيد' : 'No'}</span>
+                                         </button>
+                                       </div>
+                                     </div>
+
+                                     {/* Additional Comments Textarea */}
+                                     <div className="space-y-2">
+                                       <label className={`block text-xs font-extrabold ${isDark ? 'text-teal-200' : 'text-slate-700'}`}>
+                                         {isRtl ? '4. المقترحات والملاحظات الإضافية (اختياري):' : '4. Additional Suggestions & Feedback (Optional):'}
                                       </label>
                                       <textarea
                                         value={local.notes || ''}
@@ -2081,95 +2178,113 @@ export default function Portal({
                                     </div>
                                   </div>
 
-                                  {/* Step 3: School Placement Details (Visible once staffing is confirmed) */}
-                                  <div className={`p-5 sm:p-6 rounded-3xl border space-y-4 shadow-sm animate-in fade-in duration-300 ${
-                                    isDark ? 'bg-teal-950/40 border-teal-700/60 text-teal-100' : 'bg-white border-emerald-300 text-slate-800'
-                                  }`}>
-                                      <div className="flex items-center gap-2 border-b pb-3 border-emerald-200 dark:border-teal-800/60 font-black text-sm text-emerald-800 dark:text-emerald-300">
-                                        <Building2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                                        <span>{isRtl ? '🏫 بيانات المدرسة المسكن بها الطالب والمرحلة والصف:' : '🏫 Placed School & Grade Details:'}</span>
-                                      </div>
+                                  {/* Step 3: School Placement Details (Gated strictly behind evaluation submission) */}
+                                  {hasSubmittedRating ? (
+                                    <div className={`p-5 sm:p-6 rounded-3xl border space-y-4 shadow-sm animate-in fade-in duration-300 ${
+                                      isDark ? 'bg-teal-950/40 border-teal-700/60 text-teal-100' : 'bg-white border-emerald-300 text-slate-800'
+                                    }`}>
+                                        <div className="flex items-center gap-2 border-b pb-3 border-emerald-200 dark:border-teal-800/60 font-black text-sm text-emerald-800 dark:text-emerald-300">
+                                          <Building2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                                          <span>{isRtl ? '🏫 بيانات المدرسة المسكن بها الطالب والمرحلة والصف:' : '🏫 Placed School & Grade Details:'}</span>
+                                        </div>
 
-                                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-extrabold">
-                                        <div className="p-3.5 rounded-2xl bg-emerald-50/80 dark:bg-black/30 border border-emerald-200 dark:border-emerald-800">
-                                          <span className="text-[10px] opacity-75 block text-slate-500 dark:text-teal-400">{isRtl ? 'المدرسة المسكن عليها:' : 'Assigned School:'}</span>
-                                          <span className="text-sm sm:text-base font-black text-emerald-900 dark:text-emerald-200">{placedSchoolName}</span>
-                                        </div>
-                                        <div className="p-3.5 rounded-2xl bg-emerald-50/80 dark:bg-black/30 border border-emerald-200 dark:border-emerald-800">
-                                          <span className="text-[10px] opacity-75 block text-slate-500 dark:text-teal-400">{isRtl ? 'المرحلة الدراسية:' : 'Stage:'}</span>
-                                          <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white">{stageFormatted}</span>
-                                        </div>
-                                        <div className="p-3.5 rounded-2xl bg-emerald-50/80 dark:bg-black/30 border border-emerald-200 dark:border-emerald-800">
-                                          <span className="text-[10px] opacity-75 block text-slate-500 dark:text-teal-400">{isRtl ? 'الصف المسكن به:' : 'Assigned Grade:'}</span>
-                                          <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white">{confirmedGrade || 'غير محدد'}</span>
-                                        </div>
-                                      </div>
-
-                                      {/* Vacancy Opened Choice & Planning details */}
-                                      {((survey as any).vacancyOpenedChoice || (survey as any).vacancyOpenReason || (survey as any).vacancyOpenedSchoolName) && (
-                                        <div className={`p-3.5 rounded-2xl border text-start space-y-2 ${
-                                          isDark ? 'bg-teal-950/60 border-teal-800 text-teal-200' : 'bg-emerald-50/90 border-emerald-200 text-emerald-900'
-                                        }`}>
-                                          <div className="flex items-center gap-2 font-black text-xs text-emerald-700 dark:text-emerald-300">
-                                            <Sparkles className="w-4 h-4 text-emerald-500" />
-                                            <span>{isRtl ? 'تفاصيل ومعلومات الشاغر والتسكين المعتمدة من التخطيط:' : 'Approved Vacancy Placement Details:'}</span>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-extrabold">
+                                          <div className="p-3.5 rounded-2xl bg-emerald-50/80 dark:bg-black/30 border border-emerald-200 dark:border-emerald-800">
+                                            <span className="text-[10px] opacity-75 block text-slate-500 dark:text-teal-400">{isRtl ? 'المدرسة المسكن عليها:' : 'Assigned School:'}</span>
+                                            <span className="text-sm sm:text-base font-black text-emerald-900 dark:text-emerald-200">{placedSchoolName}</span>
                                           </div>
-                                          
-                                          {(survey as any).vacancyOpenedSchoolName && (
-                                            <div className="text-xs font-bold">
-                                              <span className="opacity-75">{isRtl ? 'المدرسة المسكن عليها والرغبة: ' : 'Placed School: '}</span>
-                                              <span className="font-extrabold underline text-emerald-800 dark:text-emerald-200">
-                                                {(survey as any).vacancyOpenedSchoolName}
-                                                {(survey as any).vacancyOpenedChoice ? ` (${
-                                                  (survey as any).vacancyOpenedChoice === '1st' ? (isRtl ? 'الرغبة الأولى' : '1st Choice')
-                                                  : (survey as any).vacancyOpenedChoice === '2nd' ? (isRtl ? 'الرغبة الثانية' : '2nd Choice')
-                                                  : (survey as any).vacancyOpenedChoice === '3rd' ? (isRtl ? 'الرغبة الثالثة' : '3rd Choice')
-                                                  : (isRtl ? 'مدرسة بديلة قريبة' : 'Alternative School')
-                                                })` : ''}
-                                              </span>
-                                            </div>
-                                          )}
+                                          <div className="p-3.5 rounded-2xl bg-emerald-50/80 dark:bg-black/30 border border-emerald-200 dark:border-emerald-800">
+                                            <span className="text-[10px] opacity-75 block text-slate-500 dark:text-teal-400">{isRtl ? 'المرحلة الدراسية:' : 'Stage:'}</span>
+                                            <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white">{stageFormatted}</span>
+                                          </div>
+                                          <div className="p-3.5 rounded-2xl bg-emerald-50/80 dark:bg-black/30 border border-emerald-200 dark:border-emerald-800">
+                                            <span className="text-[10px] opacity-75 block text-slate-500 dark:text-teal-400">{isRtl ? 'الصف المسكن به:' : 'Assigned Grade:'}</span>
+                                            <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white">{confirmedGrade || 'غير محدد'}</span>
+                                          </div>
+                                        </div>
 
-                                          {(survey as any).vacancyOpenReason && (
-                                            <div className="text-xs font-semibold p-2.5 rounded-xl bg-white/70 dark:bg-black/20 border border-emerald-200 dark:border-emerald-900">
-                                              <span className="font-bold text-emerald-800 dark:text-emerald-300 block mb-0.5">{isRtl ? '💡 سبب وتوضيح التخطيط المدرسي لولي الأمر:' : '💡 Planning Explanation:'}</span>
-                                              <p className="leading-relaxed">{(survey as any).vacancyOpenReason}</p>
+                                        {/* Vacancy Opened Choice & Planning details */}
+                                        {((survey as any).vacancyOpenedChoice || (survey as any).vacancyOpenReason || (survey as any).vacancyOpenedSchoolName) && (
+                                          <div className={`p-3.5 rounded-2xl border text-start space-y-2 ${
+                                            isDark ? 'bg-teal-950/60 border-teal-800 text-teal-200' : 'bg-emerald-50/90 border-emerald-200 text-emerald-900'
+                                          }`}>
+                                            <div className="flex items-center gap-2 font-black text-xs text-emerald-700 dark:text-emerald-300">
+                                              <Sparkles className="w-4 h-4 text-emerald-500" />
+                                              <span>{isRtl ? 'تفاصيل ومعلومات الشاغر والتسكين المعتمدة من التخطيط:' : 'Approved Vacancy Placement Details:'}</span>
                                             </div>
-                                          )}
+                                            
+                                            {(survey as any).vacancyOpenedSchoolName && (
+                                              <div className="text-xs font-bold">
+                                                <span className="opacity-75">{isRtl ? 'المدرسة المسكن عليها والرغبة: ' : 'Placed School: '}</span>
+                                                <span className="font-extrabold underline text-emerald-800 dark:text-emerald-200">
+                                                  {(survey as any).vacancyOpenedSchoolName}
+                                                  {(survey as any).vacancyOpenedChoice ? ` (${
+                                                    (survey as any).vacancyOpenedChoice === '1st' ? (isRtl ? 'الرغبة الأولى' : '1st Choice')
+                                                    : (survey as any).vacancyOpenedChoice === '2nd' ? (isRtl ? 'الرغبة الثانية' : '2nd Choice')
+                                                    : (survey as any).vacancyOpenedChoice === '3rd' ? (isRtl ? 'الرغبة الثالثة' : '3rd Choice')
+                                                    : (isRtl ? 'مدرسة بديلة قريبة' : 'Alternative School')
+                                                  })` : ''}
+                                                </span>
+                                              </div>
+                                            )}
 
-                                          {((survey as any).previousSchoolName || (survey as any).vacancyRerouteReason) && (
-                                            <div className="text-xs font-semibold p-2.5 rounded-xl bg-indigo-50/80 dark:bg-black/30 border border-indigo-200 dark:border-indigo-900 text-indigo-900 dark:text-indigo-200 space-y-1">
-                                              <span className="font-bold text-indigo-800 dark:text-indigo-300 block mb-0.5">
-                                                🔀 {isRtl ? 'بيانات التسكين والمدرسة البديلة:' : 'Alternative School Placement Info:'}
-                                              </span>
-                                              <p>
-                                                {isRtl ? `المدرسة السابقة: ${(survey as any).previousSchoolName || 'المدرسة الأولى'} ⬅️ المدرسة الحالية المعينة: ${survey.schoolName}` : `Previous: ${(survey as any).previousSchoolName} ⬅️ Current: ${survey.schoolName}`}
-                                              </p>
-                                              {(survey as any).vacancyRerouteReason && (
-                                                <p className="font-extrabold text-indigo-800 dark:text-indigo-300 bg-white/70 dark:bg-black/40 p-1.5 rounded-lg border border-indigo-200 dark:border-indigo-900 mt-1">
-                                                  💡 {isRtl ? `سبب تغيير المدرسة: ${(survey as any).vacancyRerouteReason}` : `Reason for school change: ${(survey as any).vacancyRerouteReason}`}
+                                            {(survey as any).vacancyOpenReason && (
+                                              <div className="text-xs font-semibold p-2.5 rounded-xl bg-white/70 dark:bg-black/20 border border-emerald-200 dark:border-emerald-900">
+                                                <span className="font-bold text-emerald-800 dark:text-emerald-300 block mb-0.5">{isRtl ? '💡 سبب وتوضيح التخطيط المدرسي لولي الأمر:' : '💡 Planning Explanation:'}</span>
+                                                <p className="leading-relaxed">{(survey as any).vacancyOpenReason}</p>
+                                              </div>
+                                            )}
+
+                                            {((survey as any).previousSchoolName || (survey as any).vacancyRerouteReason) && (
+                                              <div className="text-xs font-semibold p-2.5 rounded-xl bg-indigo-50/80 dark:bg-black/30 border border-indigo-200 dark:border-indigo-900 text-indigo-900 dark:text-indigo-200 space-y-1">
+                                                <span className="font-bold text-indigo-800 dark:text-indigo-300 block mb-0.5">
+                                                  🔀 {isRtl ? 'بيانات التسكين والمدرسة البديلة:' : 'Alternative School Placement Info:'}
+                                                </span>
+                                                <p>
+                                                  {isRtl ? `المدرسة السابقة: ${(survey as any).previousSchoolName || 'المدرسة الأولى'} ⬅️ المدرسة الحالية المعينة: ${survey.schoolName}` : `Previous: ${(survey as any).previousSchoolName} ⬅️ Current: ${survey.schoolName}`}
                                                 </p>
-                                              )}
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
+                                                {(survey as any).vacancyRerouteReason && (
+                                                  <p className="font-extrabold text-indigo-800 dark:text-indigo-300 bg-white/70 dark:bg-black/40 p-1.5 rounded-lg border border-indigo-200 dark:border-indigo-900 mt-1">
+                                                    💡 {isRtl ? `سبب تغيير المدرسة: ${(survey as any).vacancyRerouteReason}` : `Reason for school change: ${(survey as any).vacancyRerouteReason}`}
+                                                  </p>
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
 
-                                      <div className="p-3.5 rounded-2xl bg-amber-500 text-slate-950 font-black text-xs shadow-xs flex items-center gap-3">
-                                        <Clock className="w-5 h-5 shrink-0 text-slate-900" />
-                                        <span className="leading-relaxed">
-                                          {isRtl 
-                                            ? '⚡ تأكيد وتوجيه عاجل لولي الأمر: يرجى المبادرة وسرعة مراجعة إدارة المدرسة المسكن بها الطالب/ة لاستكمال باقي إجراءات القيد والتثبيت الفعلي بالفصول.'
-                                            : '⚡ Important Note: Please quickly visit the school administration to finalize enrollment procedures.'}
-                                        </span>
-                                      </div>
-
-                                      {(survey as any).staffingNote && (
-                                        <div className="text-[11px] bg-slate-50 dark:bg-black/20 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 font-bold">
-                                          📌 {isRtl ? `ملاحظة التسكين الميداني: ${(survey as any).staffingNote}` : `Placement Note: ${(survey as any).staffingNote}`}
+                                        <div className="p-3.5 rounded-2xl bg-amber-500 text-slate-950 font-black text-xs shadow-xs flex items-center gap-3">
+                                          <Clock className="w-5 h-5 shrink-0 text-slate-900" />
+                                          <span className="leading-relaxed">
+                                            {isRtl 
+                                              ? '⚡ تأكيد وتوجيه عاجل لولي الأمر: يرجى المبادرة وسرعة مراجعة إدارة المدرسة المسكن بها الطالب/ة لاستكمال باقي إجراءات القيد والتثبيت الفعلي بالفصول.'
+                                              : '⚡ Important Note: Please quickly visit the school administration to finalize enrollment procedures.'}
+                                          </span>
                                         </div>
-                                      )}
+
+                                        {(survey as any).staffingNote && (
+                                          <div className="text-[11px] bg-slate-50 dark:bg-black/20 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 font-bold">
+                                            📌 {isRtl ? `ملاحظة التسكين الميداني: ${(survey as any).staffingNote}` : `Placement Note: ${(survey as any).staffingNote}`}
+                                          </div>
+                                        )}
                                     </div>
+                                  ) : (
+                                    <div className={`p-6 rounded-3xl border-2 border-dashed text-center space-y-3 shadow-xs ${
+                                      isDark ? 'bg-amber-950/20 border-amber-500/40 text-amber-200' : 'bg-amber-50/80 border-amber-300 text-amber-950'
+                                    }`}>
+                                      <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400">
+                                        <Lock className="w-7 h-7" />
+                                      </div>
+                                      <h4 className="text-sm sm:text-base font-black">
+                                        {isRtl ? '🔒 بيانات التسكين والمدرسة محجوبة مؤقتاً' : '🔒 Placement details temporarily locked'}
+                                      </h4>
+                                      <p className="text-xs font-bold leading-relaxed max-w-lg mx-auto opacity-90">
+                                        {isRtl 
+                                          ? 'نأمل منكم تكرمكم بتقييم الخدمة وحفظ التقييم في الاستبيان أعلاه بالنقر على (حفظ وإرسال التقييم وعرض بيانات التسكين)، وسوف تظهر لكم تفاصيل المدرسة المسكّن بها الطالب/ة فوراً بعد الحفظ.'
+                                          : 'Please complete and submit the evaluation survey above to unlock and view the assigned school and placement details immediately.'}
+                                      </p>
+                                    </div>
+                                  )}
                                   </div>
                                 );
                               }
@@ -2489,21 +2604,52 @@ export default function Portal({
                         <div className="flex items-center gap-2 border-b border-indigo-100 dark:border-indigo-800/20 pb-3">
                           <ShieldCheck className="w-5 h-5 text-indigo-500" />
                           <span className={`text-sm font-black ${isDark ? 'text-white' : 'text-indigo-900'}`}>
-                            {isRtl ? 'البيانات الرسمية المستدعاة:' : 'Official Retrieved Data:'}
+                            {isRtl ? 'البيانات الرسمية المستدعاة لمدير المدرسة:' : 'Official Retrieved Principal Record:'}
                           </span>
                         </div>
                         
+                        {/* 4 Essential Fields Requested */}
                         <div className="space-y-3">
-                          <div className="flex justify-between items-center text-[11px] font-bold">
-                            <span className="text-slate-500">{isRtl ? 'اسم المدير:' : 'Principal Name:'}</span>
-                            <span className={isDark ? 'text-indigo-300' : 'text-indigo-900'}>{principalName}</span>
+                          {/* 1. Name */}
+                          <div className={`p-3 rounded-xl border flex items-center justify-between ${isDark ? 'bg-[#0b2a3f] border-teal-800/30' : 'bg-white border-slate-200'}`}>
+                            <div className="flex items-center gap-2">
+                              <User className="w-4 h-4 text-indigo-500 shrink-0" />
+                              <span className="text-[11px] font-extrabold text-slate-500">{isRtl ? 'اسم مدير المدرسة:' : 'Principal Name:'}</span>
+                            </div>
+                            <span className={`text-xs font-black ${isDark ? 'text-indigo-300' : 'text-indigo-950'}`}>{principalName}</span>
                           </div>
-                          <div className="space-y-1.5">
-                            <span className="text-[10px] text-slate-500 font-bold">{isRtl ? 'المدارس المرتبطة بك:' : 'Linked Schools:'}</span>
-                            <div className="max-h-32 overflow-y-auto space-y-1.5 pr-1">
+
+                          {/* 2. Civil ID & 3. Mobile */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className={`p-2.5 rounded-xl border ${isDark ? 'bg-[#0b2a3f] border-teal-800/30' : 'bg-white border-slate-200'}`}>
+                              <span className="block text-[10px] font-extrabold text-slate-400 mb-0.5">{isRtl ? 'رقم هوية مدير المدرسة:' : 'Principal Civil ID:'}</span>
+                              <span className={`text-xs font-black font-mono ${isDark ? 'text-teal-300' : 'text-slate-800'}`}>{enteredCivilId}</span>
+                            </div>
+                            <div className={`p-2.5 rounded-xl border ${isDark ? 'bg-[#0b2a3f] border-teal-800/30' : 'bg-white border-slate-200'}`}>
+                              <span className="block text-[10px] font-extrabold text-slate-400 mb-0.5">{isRtl ? 'رقم جوال مدير المدرسة:' : 'Principal Mobile:'}</span>
+                              <span className={`text-xs font-black font-mono ${isDark ? 'text-teal-300' : 'text-slate-800'}`}>{principalMobile}</span>
+                            </div>
+                          </div>
+
+                          {/* 4. Schools list (retrieved from column 'اسم المدرسة') */}
+                          <div className="space-y-1.5 pt-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] text-slate-600 dark:text-slate-300 font-black flex items-center gap-1.5">
+                                <School className="w-3.5 h-3.5 text-indigo-500" />
+                                <span>{isRtl ? 'المدارس المقترنة بهويتك (من عامود اسم المدرسة):' : 'Linked Schools (from School Name Column):'}</span>
+                              </span>
+                              <span className="text-[10px] font-black text-indigo-600 bg-indigo-100 dark:bg-indigo-900/60 dark:text-indigo-300 px-2 py-0.5 rounded-full">
+                                {retrievedSchools.length} {isRtl ? 'مدارس' : 'Schools'}
+                              </span>
+                            </div>
+                            <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
                               {retrievedSchools.map((s, idx) => (
-                                <div key={idx} className={`p-2 rounded-lg text-[10px] font-bold border ${isDark ? 'bg-[#0b2a3f] border-teal-800/30 text-teal-200' : 'bg-white border-slate-200 text-slate-700'}`}>
-                                  {s.nameAr} ({s.ministryCode || s.code})
+                                <div key={idx} className={`p-2.5 rounded-xl text-xs font-black border flex items-center justify-between transition-all ${isDark ? 'bg-[#0b2a3f] border-teal-800/30 text-teal-200' : 'bg-white border-slate-200 text-slate-800 shadow-xs'}`}>
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] flex items-center justify-center font-black">{idx + 1}</span>
+                                    <span>{extractSchoolNameFromSchool(s)}</span>
+                                  </div>
+                                  <span className="text-[10px] font-mono text-slate-400">#{s.ministryCode || s.code}</span>
                                 </div>
                               ))}
                             </div>
@@ -2517,7 +2663,7 @@ export default function Portal({
                             className="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                           >
                             <CheckCircle className="w-4 h-4" />
-                            <span>{isRtl ? 'تأكيد البيانات' : 'Confirm Data'}</span>
+                            <span>{isRtl ? 'تأكيد صحة البيانات' : 'Confirm Data'}</span>
                           </button>
                           <button
                             type="button"
@@ -2971,12 +3117,12 @@ export default function Portal({
                         {retrievalStatus !== 'success' && (
                           <button
                             type="button"
-                            disabled={isRetrieving || !enteredCivilId || enteredCivilId.length < 10 || !schoolName}
+                            disabled={isRetrieving || !enteredCivilId || enteredCivilId.length < 10}
                             onClick={() => {
                               setIsRetrieving(true);
                               setCivilIdErrorMsg('');
                               
-                              // Simulate high-professional retrieval logic
+                              // Retrieve matching schools
                               setTimeout(() => {
                                 // Match Civil ID against the column 'هوية مدير المدرسة' and linked properties
                                 const matches = findSchoolsByPrincipalCivilId(enteredCivilId, activeSchools);
@@ -2997,10 +3143,10 @@ export default function Portal({
                                   setCivilIdErrorMsg(isRtl ? '❌ لم يتم العثور على أي مدارس مرتبطة بهذا السجل المدني في عمود (هوية مدير المدرسة).' : '❌ No schools found matching this Civil ID in the Principal ID column.');
                                 }
                                 setIsRetrieving(false);
-                              }, 900);
+                              }, 600);
                             }}
                             className={`w-full py-2.5 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all ${
-                              isRetrieving || !enteredCivilId || enteredCivilId.length < 10 || !schoolName
+                              isRetrieving || !enteredCivilId || enteredCivilId.length < 10
                                 ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-50'
                                 : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md active:scale-95'
                             }`}
@@ -3068,38 +3214,48 @@ export default function Portal({
                       }`}>
                         <div className="flex items-center justify-between border-b pb-2.5 dark:border-teal-800/30">
                           <div className="flex items-center gap-2">
-                            <Building2 className={`w-4 h-4 ${isDark ? 'text-teal-300' : 'text-slate-700'}`} />
+                            <ShieldCheck className="w-4 h-4 text-emerald-500" />
                             <span className={`text-xs font-black ${isDark ? 'text-white' : 'text-slate-800'}`}>
-                              {isRtl ? 'البيانات المستدعاة لمدير المجمع الموحد' : 'Unified Principal Record Details'}
+                              {isRtl ? 'البيانات الرسمية المستدعاة لمدير المدرسة' : 'Official Principal Record Details'}
                             </span>
                           </div>
                         </div>
 
                         {/* Details Grid */}
                         <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div className={`p-2.5 rounded-xl border ${isDark ? 'bg-[#092233] border-teal-800/30' : 'bg-white border-slate-200/80'}`}>
-                            <span className="block text-[10px] font-extrabold text-slate-400">{isRtl ? 'الاسم الثنائي/الثلاثي:' : 'Principal Name:'}</span>
+                          <div className={`p-2.5 rounded-xl border col-span-2 ${isDark ? 'bg-[#092233] border-teal-800/30' : 'bg-white border-slate-200/80'}`}>
+                            <span className="block text-[10px] font-extrabold text-slate-400">{isRtl ? 'الاسم (اسم مدير المدرسة):' : 'Principal Name:'}</span>
                             <span className={`font-black truncate block ${isDark ? 'text-teal-200' : 'text-slate-800'}`}>
                               {principalName || (retrievedSchools[0] as any).principalName || 'أ. مدير المدرسة'}
                             </span>
                           </div>
                           <div className={`p-2.5 rounded-xl border ${isDark ? 'bg-[#092233] border-teal-800/30' : 'bg-white border-slate-200/80'}`}>
-                            <span className="block text-[10px] font-extrabold text-slate-400">{isRtl ? 'رقم السجل المدني:' : 'Civil ID:'}</span>
+                            <span className="block text-[10px] font-extrabold text-slate-400">{isRtl ? 'رقم هوية مدير المدرسة:' : 'Principal Civil ID:'}</span>
                             <span className={`font-black font-mono ${isDark ? 'text-teal-200' : 'text-slate-800'}`}>
                               {enteredCivilId}
                             </span>
                           </div>
                           <div className={`p-2.5 rounded-xl border ${isDark ? 'bg-[#092233] border-teal-800/30' : 'bg-white border-slate-200/80'}`}>
-                            <span className="block text-[10px] font-extrabold text-slate-400">{isRtl ? 'المدرسة الحالية:' : 'Current School:'}</span>
-                            <span className={`font-black truncate block ${isDark ? 'text-teal-200' : 'text-slate-800'}`}>
-                              {schoolName}
+                            <span className="block text-[10px] font-extrabold text-slate-400">{isRtl ? 'رقم جوال مدير المدرسة:' : 'Principal Mobile:'}</span>
+                            <span className={`font-black font-mono ${isDark ? 'text-teal-200' : 'text-slate-800'}`}>
+                              {principalMobile || '0550000000'}
                             </span>
                           </div>
-                          <div className={`p-2.5 rounded-xl border ${isDark ? 'bg-[#092233] border-teal-800/30' : 'bg-white border-slate-200/80'}`}>
-                            <span className="block text-[10px] font-extrabold text-slate-400">{isRtl ? 'عدد المدارس التابعة:' : 'Managed Schools:'}</span>
-                            <span className={`font-black text-emerald-500`}>
-                              {retrievedSchools.length} {isRtl ? 'مدارس' : 'Schools'}
-                            </span>
+                        </div>
+
+                        {/* List of Schools (retrieved from column 'اسم المدرسة') */}
+                        <div className="space-y-1.5 pt-1">
+                          <span className="text-[10px] text-slate-500 font-bold block">{isRtl ? 'المدارس التابعة والمقترنة (من عامود اسم المدرسة):' : 'Linked Schools (from School Name Column):'}</span>
+                          <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
+                            {retrievedSchools.map((s, idx) => (
+                              <div key={idx} className={`p-2 rounded-xl text-xs font-black border flex items-center justify-between ${isDark ? 'bg-[#0b2336] border-teal-800/30 text-teal-200' : 'bg-white border-slate-200 text-slate-700'}`}>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-800 text-[9px] flex items-center justify-center font-black">{idx + 1}</span>
+                                  <span>{extractSchoolNameFromSchool(s)}</span>
+                                </div>
+                                <span className="text-[10px] font-mono text-slate-400">#{s.ministryCode || (s as any).code}</span>
+                              </div>
+                            ))}
                           </div>
                         </div>
 

@@ -168,8 +168,9 @@ export const TRANSLATIONS = {
     no: 'لا، لم يتم الحل بعد',
     unresolvedReasonLabel: 'سبب عدم حل المشكلة',
     unresolvedReasonPlaceholder: 'الرجاء كتابة سبب عدم حل المشكلة بالتفصيل...',
-    staffSatisfaction: 'مدى رضاك عن تعامل وأداء الموظف المختص',
-    receptionSatisfaction: 'مدى رضاك عن جودة الاستقبال والتوجيه',
+    staffSatisfaction: 'رضاك عن الخدمة المقدمة لك',
+    receptionSatisfaction: 'رضاك عن سرعة معالجة الطلب',
+    generalizeService: 'هل ترى تعميم الخدمة لكافة الإدارات التعليمية',
     reviewerNotes: 'ملاحظات وتفاصيل إضافية يسجلها المراجع',
     notesPlaceholder: 'اكتب هنا أي تفاصيل إضافية حول طلبك، جودة التعامل، أو أي مقترحات للتطوير...',
     submitBtn: 'إرسال التقييم بأمان',
@@ -338,8 +339,9 @@ export const TRANSLATIONS = {
     no: 'No, not resolved yet',
     unresolvedReasonLabel: 'Reason for not resolving the issue',
     unresolvedReasonPlaceholder: 'Please describe the reason why the problem was not solved...',
-    staffSatisfaction: 'Your satisfaction with the specialized employee\'s performance & support',
-    receptionSatisfaction: 'Your satisfaction with reception and direction quality',
+    staffSatisfaction: 'Your satisfaction with the provided service',
+    receptionSatisfaction: 'Your satisfaction with the speed of request processing',
+    generalizeService: 'Do you support generalizing the service to all educational directorates?',
     reviewerNotes: 'Additional notes or remarks recorded by the reviewer',
     notesPlaceholder: 'Write any additional details about your request, service quality, or suggestions for improvement here...',
     submitBtn: 'Submit Secure Evaluation',
@@ -466,9 +468,11 @@ export const INITIAL_SCHOOLS: SchoolItem[] = [
     district: 'القطاع الشرقي', 
     principalId: '1234567890',
     customFields: {
+      'اسم المدرسة': 'مدرسة أحد الابتدائية',
       'هوية مدير المدرسة': '1234567890',
       'اسم مدير المدرسة': 'أ. عبدالرحمن الأحمدي',
-      'رقم الجوال': '0551234567'
+      'رقم جوال مدير المدرسة': '0551234567',
+      'الرقم الوزاري': '1001'
     }
   },
   { 
@@ -481,9 +485,11 @@ export const INITIAL_SCHOOLS: SchoolItem[] = [
     district: 'القطاع الشمالي', 
     principalId: '1234567890',
     customFields: {
+      'اسم المدرسة': 'ثانوية الفتح بالمدينة المنورة',
       'هوية مدير المدرسة': '1234567890',
       'اسم مدير المدرسة': 'أ. عبدالرحمن الأحمدي',
-      'رقم الجوال': '0551234567'
+      'رقم جوال مدير المدرسة': '0551234567',
+      'الرقم الوزاري': '1002'
     }
   },
   { 
@@ -496,14 +502,64 @@ export const INITIAL_SCHOOLS: SchoolItem[] = [
     district: 'القطاع الغربي', 
     principalId: '1234567890',
     customFields: {
+      'اسم المدرسة': 'مجمع طيبة التعليمي',
       'هوية مدير المدرسة': '1234567890',
       'اسم مدير المدرسة': 'أ. عبدالرحمن الأحمدي',
-      'رقم الجوال': '0551234567'
+      'رقم جوال مدير المدرسة': '0551234567',
+      'الرقم الوزاري': '1003'
     }
   },
-  { id: 'sch_104', nameAr: 'المتوسطة الثانية عشر للبنات', nameEn: '12th Intermediate School for Girls', ministryCode: '1004', stage: 'Intermediate', gender: 'girls', district: 'القطاع الشمالي' },
-  { id: 'sch_105', nameAr: 'مدرسة الأنصار المتوسطة', nameEn: 'Al-Ansar Intermediate School', ministryCode: '1005', stage: 'Intermediate', gender: 'boys', district: 'القطاع الجنوبي' },
-  { id: 'sch_106', nameAr: 'مدرسة القباء الابتدائية', nameEn: 'Quba Elementary School', ministryCode: '1006', stage: 'Elementary', gender: 'boys', district: 'القطاع الجنوبي' },
+  { 
+    id: 'sch_104', 
+    nameAr: 'مدرسة الإمام علي بن أبي طالب الثانوية', 
+    nameEn: 'Ali Bin Abi Taleb Secondary School', 
+    ministryCode: '1004', 
+    stage: 'Secondary', 
+    gender: 'boys', 
+    district: 'القطاع الشمالي',
+    principalId: '1068575628',
+    customFields: {
+      'اسم المدرسة': 'مدرسة الإمام علي بن أبي طالب الثانوية',
+      'هوية مدير المدرسة': '1068575628',
+      'اسم مدير المدرسة': 'أ. سالم بن محمد الترجمي',
+      'رقم جوال مدير المدرسة': '0551112222',
+      'الرقم الوزاري': '1004'
+    }
+  },
+  { 
+    id: 'sch_105', 
+    nameAr: 'مدرسة الأنصار المتوسطة الرائدة', 
+    nameEn: 'Al-Ansar Intermediate School', 
+    ministryCode: '1005', 
+    stage: 'Intermediate', 
+    gender: 'boys', 
+    district: 'القطاع الجنوبي',
+    principalId: '1068575628',
+    customFields: {
+      'اسم المدرسة': 'مدرسة الأنصار المتوسطة الرائدة',
+      'هوية مدير المدرسة': '1068575628',
+      'اسم مدير المدرسة': 'أ. سالم بن محمد الترجمي',
+      'رقم جوال مدير المدرسة': '0551112222',
+      'الرقم الوزاري': '1005'
+    }
+  },
+  { 
+    id: 'sch_106', 
+    nameAr: 'مدرسة قباء الابتدائية النموذجية', 
+    nameEn: 'Quba Elementary School', 
+    ministryCode: '1006', 
+    stage: 'Elementary', 
+    gender: 'boys', 
+    district: 'القطاع الجنوبي',
+    principalId: '1068575628',
+    customFields: {
+      'اسم المدرسة': 'مدرسة قباء الابتدائية النموذجية',
+      'هوية مدير المدرسة': '1068575628',
+      'اسم مدير المدرسة': 'أ. سالم بن محمد الترجمي',
+      'رقم جوال مدير المدرسة': '0551112222',
+      'الرقم الوزاري': '1006'
+    }
+  },
   { id: 'sch_107', nameAr: 'ثانوية الملك فهد', nameEn: 'King Fahd Secondary School', ministryCode: '1007', stage: 'Secondary', gender: 'boys', district: 'القطاع الغربي' },
   { id: 'sch_108', nameAr: 'الروضة السادسة بالمدينة', nameEn: '6th Kindergarten', ministryCode: '1008', stage: 'Kindergarten', gender: 'both', district: 'القطاع الشرقي' },
   { id: 'sch_109', nameAr: 'مدرسة الإمام الشاطبي النموذجية', nameEn: 'Al-Shatibi Model School', ministryCode: '1009', stage: 'Elementary', gender: 'boys', district: 'القطاع الوسط' },

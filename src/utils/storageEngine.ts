@@ -339,6 +339,61 @@ const PRIMARY_SUPER_ADMIN: OfficerUser = {
   roleDescription: 'مدير النظام - كامل الصلاحيات وإدارة المستخدمين والمدارس'
 };
 
+export const DEMO_OFFICERS: OfficerUser[] = [
+  PRIMARY_SUPER_ADMIN,
+  {
+    id: 'emp_followup',
+    nameAr: 'عبدالرحيم الأحمدي (مشرف القبول والتسجيل)',
+    nameEn: 'Abdulrahim Al-Ahmadi - Admission & Registration Supervisor',
+    nationalId: '1111111111',
+    role: 'supervisor',
+    mobile: '0500000001',
+    isActive: true,
+    password: 'password123',
+    workField: 'وحدة القبول - قسم القبول والتسجيل ونقل الطلاب',
+    roleDescription: 'استلام المعاملات والشكاوي وتوجيهها للمستفيدين والمتابعة'
+  },
+  {
+    id: 'emp_equivalency',
+    nameAr: 'رمزي المزيني (مشرف القبول معادلة الشهادات)',
+    nameEn: 'Ramzi Al-Muzaini - Equivalency Supervisor',
+    nationalId: '2222222222',
+    role: 'equivalency_supervisor',
+    mobile: '0500000002',
+    isActive: true,
+    password: 'password123',
+    canHandleEqualizations: true,
+    workField: 'وحدة القبول - قسم معادلة الشهادات والمؤهلات الدراسية',
+    roleDescription: 'فحص ومعادلة الشهادات والمؤهلات الدراسية وتحديد المواعيد والاعتماد'
+  },
+  {
+    id: 'emp_planning',
+    nameAr: 'كمال الأحمدي (مسؤول الشواغر)',
+    nameEn: 'Kamal Al-Ahmadi - School Planning',
+    nationalId: '3333333333',
+    role: 'school_planning',
+    mobile: '0500000003',
+    isActive: true,
+    password: 'password123',
+    workField: 'إدارة التخطيط المدرسي - قسم الشواغر والميزانيات',
+    roleDescription: 'مشرف تخطيط مسؤول عن فتح الشواغر وتوزيع الميزانية المدرسية'
+  },
+  {
+    id: 'emp_leadership',
+    nameAr: 'سامي الأحمدي (مشرف قيادة)',
+    nameEn: 'Sami Al-Ahmadi - School Leadership',
+    nationalId: '4444444444',
+    role: 'school_leadership',
+    mobile: '0500000004',
+    isActive: true,
+    password: 'password123',
+    assignedGender: 'girls',
+    assignedStage: 'الكل',
+    workField: 'إدارة القيادة المدرسية - الشؤون التعليمية',
+    roleDescription: 'مشرف قيادة مسؤول عن متابعة التشكيلات المدرسية وتوجيه مديري المدارس'
+  }
+];
+
 export async function saveOfficersToStorage(officers: OfficerUser[]): Promise<void> {
   if (!officers || !Array.isArray(officers) || officers.length === 0) return;
   
@@ -400,21 +455,24 @@ export async function loadOfficersFromStorage(): Promise<OfficerUser[]> {
     }
   }
 
-  // Ensure Primary Super Admin is always present
-  if (!list.some(o => o.nationalId === '1068575628' || o.id === 'emp_1')) {
-    list.unshift(PRIMARY_SUPER_ADMIN);
-  } else {
-    list = list.map(o => {
-      if (o.nationalId === '1068575628' || o.id === 'emp_1') {
-        return {
-          ...o,
-          ...PRIMARY_SUPER_ADMIN,
-          isActive: true
-        };
-      }
-      return o;
-    });
-  }
+  // Ensure Demo Officers are always present for testing as requested
+  DEMO_OFFICERS.forEach(demo => {
+    if (!list.some(o => o.id === demo.id || o.nationalId === demo.nationalId)) {
+      list.push(demo);
+    }
+  });
+
+  // Ensure Primary Super Admin is always active and has correct data
+  list = list.map(o => {
+    if (o.nationalId === '1068575628' || o.id === 'emp_1') {
+      return {
+        ...o,
+        ...PRIMARY_SUPER_ADMIN,
+        isActive: true
+      };
+    }
+    return o;
+  });
 
   return list;
 }
@@ -585,8 +643,10 @@ export function isSurveyEqualizationRequest(survey: SurveyResponse | undefined |
   return (
     survey.requestType === 'equivalency' ||
     survey.serviceType === 'equalization' ||
+    survey.serviceType === 'equivalency' ||
     Boolean(survey.isEqualizationRequest) ||
-    String(survey.problemType).startsWith('cert_')
+    String(survey.problemType).startsWith('cert_') ||
+    String(survey.problemType).includes('eq')
   );
 }
 
@@ -596,8 +656,28 @@ export function isSurveyTransferRequest(survey: SurveyResponse | undefined | nul
     survey.requestType === 'transfer' ||
     survey.serviceType === 'transfer' ||
     survey.problemType === 'distance_from_school' ||
-    survey.problemType === 'vacancies_unavailable'
+    survey.problemType === 'vacancies_unavailable' ||
+    survey.problemType === 'student_density' ||
+    survey.problemType === 'vacancies_closed' ||
+    survey.problemType === 'class_density'
   );
+}
+
+export function isSurveyAdmissionOrTransferRequest(survey: SurveyResponse | undefined | null): boolean {
+  if (!survey) return false;
+  // If it's an equivalency request, it is NOT an admission/transfer request
+  if (isSurveyEqualizationRequest(survey)) return false;
+  return true;
+}
+
+export function canOfficerHandleAdmissionRequests(officer: OfficerUser | undefined | null): boolean {
+  if (!officer) return false;
+  return officer.role === 'admin' || officer.role === 'director' || officer.role === 'supervisor';
+}
+
+export function canOfficerHandleEquivalencyRequests(officer: OfficerUser | undefined | null): boolean {
+  if (!officer) return false;
+  return officer.role === 'admin' || officer.role === 'director' || officer.role === 'equivalency_supervisor' || Boolean(officer.canHandleEqualizations);
 }
 
 export function getRequestTypeInfo(survey: SurveyResponse | undefined | null, isRtl: boolean = true): {
@@ -609,8 +689,8 @@ export function getRequestTypeInfo(survey: SurveyResponse | undefined | null, is
 } {
   if (!survey) {
     return {
-      label: isRtl ? 'تسجيل جديد' : 'New Registration',
-      subLabel: isRtl ? 'تسجيل طالب مستجد' : 'Fresh Student Registration',
+      label: isRtl ? 'تسجيل مستجد' : 'New Registration',
+      subLabel: isRtl ? 'تسجيل طالب جديد' : 'Fresh Student Registration',
       badgeClass: 'bg-emerald-100 text-emerald-800',
       icon: '🎒',
       category: 'registration'
@@ -619,8 +699,8 @@ export function getRequestTypeInfo(survey: SurveyResponse | undefined | null, is
 
   if (isSurveyEqualizationRequest(survey)) {
     return {
-      label: isRtl ? 'معادلة' : 'Equivalency',
-      subLabel: isRtl ? 'معادلة شهادات ومؤهلات' : 'Certificates Equivalency',
+      label: isRtl ? 'طلب معادلة مؤهلات' : 'Equivalency Request',
+      subLabel: isRtl ? 'معادلة شهادات ومؤهلات دراسية' : 'Certificates Equivalency',
       badgeClass: 'bg-purple-100 text-purple-800',
       icon: '🎓',
       category: 'equalization'
@@ -629,8 +709,8 @@ export function getRequestTypeInfo(survey: SurveyResponse | undefined | null, is
 
   if (isSurveyTransferRequest(survey)) {
     return {
-      label: isRtl ? 'نقل' : 'Transfer',
-      subLabel: isRtl ? 'طلب نقل بين المدارس' : 'Transfer Request',
+      label: isRtl ? 'طلب نقل طالب' : 'Transfer Request',
+      subLabel: isRtl ? 'نقل إلى مدرسة أخرى - غير مستجد' : 'Transfer to Another School',
       badgeClass: 'bg-blue-100 text-blue-800',
       icon: '🔄',
       category: 'transfer'
@@ -638,8 +718,8 @@ export function getRequestTypeInfo(survey: SurveyResponse | undefined | null, is
   }
 
   return {
-    label: isRtl ? 'تسجيل جديد' : 'New Registration',
-    subLabel: isRtl ? 'تسجيل طالب مستجد' : 'Fresh Student Registration',
+    label: isRtl ? 'تسجيل مستجد' : 'New Registration',
+    subLabel: isRtl ? 'تسجيل طالب جديد (مستجد)' : 'Fresh Student Registration',
     badgeClass: 'bg-emerald-100 text-emerald-800',
     icon: '🎒',
     category: 'registration'
