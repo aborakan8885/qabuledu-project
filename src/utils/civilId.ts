@@ -38,8 +38,22 @@ export const normalizeKey = (k: string): string => {
     .replace(/[\s_\-\.\:\;\,\/\(\)\[\]\uFEFF\u00A0\u200B\r\n\t]/g, '');
 };
 
-// Normalized keywords specifically for Principal Civil ID / National ID column
+// Normalized keywords specifically for Civil ID / Principal Civil ID / National ID column
 export const PRINCIPAL_ID_KEYWORDS: string[] = [
+  'السجل المدني',
+  'السجلالمدني',
+  'سجل مدني',
+  'سجلمدني',
+  'رقم السجل المدني',
+  'رقمالسجلالمدني',
+  'السجل المدني لمدير المدرسة',
+  'السجلالمدنيلمديرالمدرسة',
+  'السجل المدني لمديرة المدرسة',
+  'السجل المدني للمدير',
+  'السجلالمدنيللمدير',
+  'السجل المدني للمديرة',
+  'سجل مدني لمدير المدرسة',
+  'سجل مدني للمدير',
   'هوية مدير المدرسة',
   'هويةمديرالمدرسة',
   'هوية مديرة المدرسة',
@@ -65,14 +79,6 @@ export const PRINCIPAL_ID_KEYWORDS: string[] = [
   'سجل المديرة',
   'سجل مدير',
   'سجلمدير',
-  'السجل المدني لمدير المدرسة',
-  'السجلالمدنيلمديرالمدرسة',
-  'السجل المدني لمديرة المدرسة',
-  'السجل المدني للمدير',
-  'السجلالمدنيللمدير',
-  'السجل المدني للمديرة',
-  'سجل مدني لمدير المدرسة',
-  'سجل مدني للمدير',
   'هوية المدير المكلف',
   'سجل المدير المكلف',
   'هوية المسؤول',
@@ -83,6 +89,8 @@ export const PRINCIPAL_ID_KEYWORDS: string[] = [
   'هوية قائدة المدرسة',
   'principalid',
   'principalcivilid',
+  'civilid',
+  'nationalid',
   'principalnationalid',
   'managerid',
   'headmasterid'
@@ -90,10 +98,10 @@ export const PRINCIPAL_ID_KEYWORDS: string[] = [
 
 // Normalized general ID keywords
 export const GENERAL_ID_KEYWORDS: string[] = [
-  'سجل مدني',
-  'سجلمدني',
   'السجل المدني',
   'السجلالمدني',
+  'سجل مدني',
+  'سجلمدني',
   'رقم السجل المدني',
   'رقمالسجلالمدني',
   'رقم السجل',
@@ -128,69 +136,32 @@ export const GENERAL_ID_KEYWORDS: string[] = [
 export const extractCivilIdFromSchool = (school: any): string | null => {
   if (!school) return null;
 
-  const fields = { ...(school.customFields || {}), ...school };
-
-  // Priority 1: Specific Principal Civil ID columns (e.g., هوية مدير المدرسة, هوية المدير, رقم هوية مدير المدرسة)
-  for (const [key, val] of Object.entries(fields)) {
-    if (val === null || val === undefined || typeof val === 'object') continue;
-    const normKey = normalizeKey(key);
-
-    const isHighMatch = PRINCIPAL_ID_KEYWORDS.some(kw => normKey.includes(kw) || kw.includes(normKey));
-    if (isHighMatch) {
-      const cleaned = cleanDigitsString(val);
-      if (cleaned.length >= 4) {
-        return cleaned;
-      }
-    }
-  }
-
-  // Priority 2: Direct explicit properties on school object
+  // Fast path 1: Direct properties
   const directCandidate = 
-    school.principalId || 
     school.principalCivilId || 
-    school.principalNationalId || 
-    school.nationalId || 
+    school.principalId || 
     school.civilId || 
-    school.national_id || 
-    school.civil_id || 
-    school.idNumber || 
-    school.identityNo ||
-    school.managerId;
+    school.nationalId ||
+    school.customFields?.['السجل المدني'] ||
+    school.customFields?.['رقم السجل المدني'] ||
+    school.customFields?.['هوية مدير المدرسة'] ||
+    school.customFields?.['هوية المدير'];
 
   if (directCandidate !== undefined && directCandidate !== null && String(directCandidate).trim()) {
     const cleaned = cleanDigitsString(directCandidate);
-    if (cleaned) return cleaned;
+    if (cleaned && cleaned.length >= 4) return cleaned;
   }
 
-  // Priority 3: General ID columns (هوية, سجل مدني, وطني)
-  for (const [key, val] of Object.entries(fields)) {
-    if (val === null || val === undefined || typeof val === 'object') continue;
-    const normKey = normalizeKey(key);
-
-    // Skip ministerial code, school name, stage, gender, phone keys
-    if ((normKey.includes('وزاري') || normKey.includes('ministry') || normKey === 'code' || normKey === 'id' || normKey.includes('مدرسة') || normKey.includes('school') || normKey.includes('جوال') || normKey.includes('هاتف') || normKey.includes('phone') || normKey.includes('mobile')) &&
-        !normKey.includes('سجل') && !normKey.includes('هويه') && !normKey.includes('مدني') && !normKey.includes('civil') && !normKey.includes('national') && !normKey.includes('ssn') && !normKey.includes('identity')) {
-      continue;
-    }
-
-    const isMatch = GENERAL_ID_KEYWORDS.some(kw => normKey.includes(kw) || kw.includes(normKey));
-    if (isMatch) {
-      const cleaned = cleanDigitsString(val);
-      if (cleaned.length >= 4) {
-        return cleaned;
+  // Fast path 2: Check customFields keys
+  if (school.customFields) {
+    for (const [key, val] of Object.entries(school.customFields)) {
+      if (!val) continue;
+      const normKey = normalizeKey(key);
+      if ((normKey.includes('سجل') || normKey.includes('هويه') || normKey.includes('civil') || normKey.includes('national')) &&
+          !normKey.includes('جوال') && !normKey.includes('هاتف') && !normKey.includes('وزاري')) {
+        const cleaned = cleanDigitsString(val);
+        if (cleaned && cleaned.length >= 4) return cleaned;
       }
-    }
-  }
-
-  // Priority 4: Fallback - Search all values for 10-digit number starting with 1 or 2
-  for (const [key, val] of Object.entries(fields)) {
-    if (val === null || val === undefined || typeof val === 'object') continue;
-    const normKey = normalizeKey(key);
-    if (normKey.includes('وزاري') || normKey.includes('ministry') || normKey.includes('جوال') || normKey.includes('هاتف') || normKey.includes('phone') || normKey.includes('mobile')) continue;
-    
-    const cleaned = cleanDigitsString(val);
-    if (/^[12]\d{9}$/.test(cleaned)) {
-      return cleaned;
     }
   }
 
@@ -309,13 +280,12 @@ export const findSchoolsByPrincipalCivilId = (enteredCivilId: string, schoolsLis
  */
 export const extractSchoolNameFromSchool = (school: any): string => {
   if (!school) return 'المدرسة';
-  const fields = { ...(school.customFields || {}), ...school };
+  const cf = school.customFields;
   const name =
-    fields['اسم المدرسة'] ||
-    fields['اسم المدرسه'] ||
-    fields['اسم المنشأة'] ||
-    fields['المدرسة'] ||
-    fields['School Name'] ||
+    (cf && (cf['اسم المدرسة'] || cf['اسم المدرسه'] || cf['اسم المنشأة'] || cf['المدرسة'] || cf['School Name'])) ||
+    school['اسم المدرسة'] ||
+    school['اسم المدرسه'] ||
+    school['المدرسة'] ||
     school.nameAr ||
     school.nameEn ||
     'المدرسة';
@@ -336,54 +306,45 @@ export const extractPrincipalInfoFromSchool = (school: any): {
     return { name: 'أ. مدير المدرسة', civilId: '', mobile: '0550000000', code: '45013', schoolName: 'المدرسة' };
   }
 
-  const fields = { ...(school.customFields || {}), ...school };
-  
-  // 1. Extract Principal Name (من عامود: اسم مدير المدرسة)
-  let name = 
-    fields['اسم مدير المدرسة'] ||
-    fields['اسم مدير/ة المدرسة'] ||
-    fields['اسم المدير'] ||
-    fields['اسم المديرة'] ||
-    fields['مدير المدرسة'] ||
-    fields['المدير'] ||
-    fields['المديرة'] ||
+  const cf = school.customFields;
+
+  // 1. Extract Principal Name
+  const rawName = 
+    (cf && (cf['اسم مدير المدرسة'] || cf['اسم مدير/ة المدرسة'] || cf['اسم المدير'] || cf['اسم المديرة'] || cf['مدير المدرسة'] || cf['المدير'] || cf['المديرة'])) ||
+    school['اسم مدير المدرسة'] ||
+    school['اسم المدير'] ||
     school.principalName ||
     school.managerName ||
-    `أ. مدير ${school.nameAr || ''}`;
+    (school.nameAr ? `أ. مدير ${school.nameAr}` : 'غير محدد');
 
-  // 2. Extract Principal Civil ID (من عامود: هوية مدير المدرسة)
-  let civilId = 
-    extractCivilIdFromSchool(school) ||
-    fields['هوية مدير المدرسة'] ||
-    fields['رقم هوية مدير المدرسة'] ||
-    fields['هوية المدير'] ||
-    fields['السجل المدني لمدير المدرسة'] ||
-    fields['السجل المدني'] ||
+  // 2. Extract Principal Civil ID
+  const rawCivilId = 
+    (cf && (cf['السجل المدني'] || cf['رقم السجل المدني'] || cf['السجل المدني لمدير المدرسة'] || cf['هوية مدير المدرسة'] || cf['رقم هوية مدير المدرسة'] || cf['هوية المدير'])) ||
+    school.principalCivilId ||
+    school.principalId ||
+    school.civilId ||
+    school.nationalId ||
+    school['السجل المدني'] ||
+    school['هوية مدير المدرسة'] ||
     '';
 
-  // 3. Extract Principal Mobile (من عامود: رقم جوال مدير المدرسة)
-  let mobile = 
-    fields['رقم جوال مدير المدرسة'] ||
-    fields['جوال مدير المدرسة'] ||
-    fields['رقم جوال المدير'] ||
-    fields['جوال المدير'] ||
-    fields['رقم الجوال'] ||
-    fields['الجوال'] ||
-    fields['الهاتف'] ||
-    fields['هاتف المدرسة'] ||
+  // 3. Extract Principal Mobile
+  const rawMobile = 
+    (cf && (cf['رقم جوال مدير المدرسة'] || cf['جوال مدير المدرسة'] || cf['رقم جوال المدير'] || cf['جوال المدير'] || cf['رقم الجوال'] || cf['الجوال'] || cf['الهاتف'] || cf['هاتف المدرسة'])) ||
     school.principalMobile ||
     school.mobile ||
     school.phone ||
+    school['رقم جوال مدير المدرسة'] ||
     '0550000000';
 
-  const code = fields['الرقم الوزاري'] || school.ministryCode || school.code || '45013';
+  const rawCode = (cf && cf['الرقم الوزاري']) || school.ministryCode || school.code || school['الرقم الوزاري'] || '45013';
   const schoolName = extractSchoolNameFromSchool(school);
 
   return { 
-    name: String(name).trim(), 
-    civilId: cleanDigitsString(civilId),
-    mobile: String(mobile).trim(), 
-    code: String(code).trim(),
+    name: String(rawName).trim(), 
+    civilId: cleanDigitsString(rawCivilId),
+    mobile: String(rawMobile).trim(), 
+    code: String(rawCode).trim(),
     schoolName 
   };
 };

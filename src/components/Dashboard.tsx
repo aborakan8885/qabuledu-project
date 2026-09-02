@@ -91,6 +91,7 @@ import { ReportExportData } from '../utils/reportExporter';
 import { OfficialReportModal } from './OfficialReportModal';
 import BeneficiarySatisfactionView from './BeneficiarySatisfactionView';
 import BeneficiaryFeedbackView from './BeneficiaryFeedbackView';
+import PrincipalsDatabaseView from './PrincipalsDatabaseView';
 import DateBackupModal from './DateBackupModal';
 import * as XLSX from 'xlsx';
 
@@ -193,14 +194,14 @@ export default function Dashboard({
 
   const [activeOfficer, setActiveOfficer] = useState<OfficerUser>(DEMO_OFFICERS[0]);
   const [activeFeature, setActiveFeature] = useState<
-    'requests' | 'equivalency_requests' | 'principal_reports' | 'sync' | 'settings' | 'placements' | 'staff' | 'feedback' | 'analytics' | 'alerts' | 'schools' | 'satisfaction' | 'reports'
+    'requests' | 'equivalency_requests' | 'principal_reports' | 'sync' | 'settings' | 'placements' | 'staff' | 'feedback' | 'analytics' | 'alerts' | 'schools' | 'satisfaction' | 'reports' | 'principal_data'
   >('requests');
   
   const isFeatureAllowedForOfficer = (feature: string): boolean => {
     // 1. الأدمن / كل شيء
     if (activeOfficer.role === 'admin') return true;
 
-    // 2. المدير / جميعها ما عدا: المزامنة والربط الالكتروني - لوحة الاعدادت الشاملة - منسوبي الادارة والكوادر والصلاحيات - دليل المدارس والأرقام الوزارية - التقارير المتقدمة
+    // 2. المدير / جميعها ما عدا: المزامنة والربط الالكتروني - لوحة الاعدادت الشاملة - منسوبي الادارة والكوادر والصلاحيات - دليل المدارس والأرقام الوزارية - التقارير المتقدمة - بيانات مديري المدارس
     if (activeOfficer.role === 'director') {
       const forbiddenForDirector = ['sync', 'settings', 'staff', 'schools', 'reports'];
       return !forbiddenForDirector.includes(feature);
@@ -1627,6 +1628,24 @@ export default function Dashboard({
                     <div className="text-[11px] font-black">التقارير المتقدمة</div>
                     <div className={`mt-1 px-2 py-0.5 rounded-md text-[9px] font-bold inline-block ${activeFeature === 'reports' ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
                        جديد ومطور
+                    </div>
+                 </div>
+              </button>
+           )}
+
+           {/* Card 14: بيانات مديري المدارس والربط بالسجل المدني */}
+           {isFeatureAllowedForOfficer('principal_data') && (
+              <button 
+                onClick={() => setActiveFeature('principal_data')}
+                className={`p-6 text-right rounded-[32px] border transition-all cursor-pointer flex items-center gap-4 group ${activeFeature === 'principal_data' ? 'bg-emerald-700 text-white border-emerald-700 ring-4 ring-emerald-500/20' : 'bg-white dark:bg-[#081e2b] text-slate-800 dark:text-white border-slate-100 dark:border-teal-800/20 hover:border-emerald-500'}`}
+              >
+                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${activeFeature === 'principal_data' ? 'bg-white/20 text-white' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600'}`}>
+                    <Users className="w-7 h-7" />
+                 </div>
+                 <div className="flex-1">
+                    <div className="text-[11px] font-black">بيانات مديري المدارس</div>
+                    <div className={`mt-1 px-2 py-0.5 rounded-md text-[9px] font-bold inline-block ${activeFeature === 'principal_data' ? 'bg-white/20 text-white' : 'bg-emerald-50 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'}`}>
+                       رفع وربط Excel 📊
                     </div>
                  </div>
               </button>
@@ -3587,6 +3606,17 @@ export default function Dashboard({
                </div>
             </div>
           </div>
+        )}
+
+        {/* VIEW 13: PRINCIPALS DATABASE & EXCEL LINKING (بيانات مديري المدارس والربط بالسجل المدني) */}
+        {activeFeature === 'principal_data' && (
+          <PrincipalsDatabaseView
+            schools={schools}
+            onUpdateSchools={onImportSchools}
+            onDeleteSchool={onDeleteSchool}
+            isDark={isDark}
+            isRtl={isRtl}
+          />
         )}
 
       </main>

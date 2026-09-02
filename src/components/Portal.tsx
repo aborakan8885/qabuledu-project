@@ -388,55 +388,60 @@ export default function Portal({
         }
       }
 
-      // Try to find if this school exists in current principal reports
-      const matchedReport = principalReports.find(
+      let finalSchoolName = schoolName.trim();
+      let finalSchoolCode = foundReg?.schoolCode || schoolCode.trim() || '';
+      let finalPrincipalName = foundReg?.principalName || principalName.trim() || '';
+      let finalMobile = foundReg?.mobile || principalMobile.trim() || '';
+
+      const matchedReport = principalReports?.find(
         r => r.schoolName.trim().toLowerCase() === schoolName.trim().toLowerCase()
       );
 
-      let finalSchoolCode = foundReg?.schoolCode || '';
-      let finalPrincipalName = foundReg?.principalName || '';
-      let finalMobile = foundReg?.mobile || '';
+      // Look up in schools list
+      const normInput = normalizeArabicText(schoolName);
+      const matchedSchoolObj = selectedSchoolData || schools.find(sch => {
+        const schCode = String(sch.ministryCode || sch.code || sch.id || '').trim();
+        const schNameAr = normalizeArabicText(sch.nameAr);
+        return schNameAr === normInput || (schCode && schCode === schoolName.trim());
+      });
 
-      if (!finalSchoolCode) {
-        if (matchedReport) {
-          finalSchoolCode = matchedReport.schoolCode;
-          finalPrincipalName = matchedReport.principalName;
-          finalMobile = matchedReport.mobile;
+      if (matchedSchoolObj) {
+        finalSchoolName = matchedSchoolObj.nameAr || finalSchoolName;
+        const info = extractPrincipalInfoFromSchool(matchedSchoolObj);
+        if (info.schoolName) finalSchoolName = info.schoolName;
+        if (info.name && (!finalPrincipalName || finalPrincipalName === 'أ. مدير المدرسة' || finalPrincipalName === 'مدير المدرسة')) {
+          finalPrincipalName = info.name;
+        }
+        if (info.code && !finalSchoolCode) {
+          finalSchoolCode = info.code;
+        }
+        if (info.mobile && (!finalMobile || finalMobile === '0554445555' || finalMobile === '0550000000')) {
+          finalMobile = info.mobile;
+        }
+      } else if (matchedReport) {
+        finalSchoolCode = matchedReport.schoolCode;
+        finalPrincipalName = matchedReport.principalName;
+        finalMobile = matchedReport.mobile;
+      } else {
+        // Find in surveys
+        const matchedSurvey = surveys.find(
+          s => normalizeArabicText(s.schoolName) === normInput
+        );
+        if (matchedSurvey && matchedSurvey.schoolCode) {
+          finalSchoolCode = matchedSurvey.schoolCode;
+          finalPrincipalName = finalPrincipalName || 'أ. مدير المدرسة';
+          finalMobile = finalMobile || '0550000000';
         } else {
-          // Look up in schools list
-          const normInput = normalizeArabicText(schoolName);
-          const matchedSchoolObj = schools.find(sch => {
-            const schCode = String(sch.ministryCode || sch.code || sch.id || '').trim();
-            const schNameAr = normalizeArabicText(sch.nameAr);
-            return schNameAr === normInput || (schCode && schCode === schoolName.trim());
-          });
-
-          if (matchedSchoolObj) {
-            finalSchoolCode = String(matchedSchoolObj.ministryCode || matchedSchoolObj.code || matchedSchoolObj.id || '45013');
-            finalPrincipalName = 'أ. مدير المدرسة';
-            finalMobile = '0554445555';
-          } else {
-            // Find in surveys
-            const matchedSurvey = surveys.find(
-              s => normalizeArabicText(s.schoolName) === normInput
-            );
-            if (matchedSurvey && matchedSurvey.schoolCode) {
-              finalSchoolCode = matchedSurvey.schoolCode;
-              finalPrincipalName = 'أ. مدير المدرسة';
-              finalMobile = '0550000000';
-            } else {
-              // Fallback
-              finalSchoolCode = '45013';
-              finalPrincipalName = 'أ. مدير المدرسة';
-              finalMobile = '0554445555';
-            }
-          }
+          // Fallback
+          finalSchoolCode = finalSchoolCode || '45013';
+          finalPrincipalName = finalPrincipalName || 'أ. مدير المدرسة';
+          finalMobile = finalMobile || '0554445555';
         }
       }
 
       setPrincipalSession({
         schoolCode: finalSchoolCode,
-        schoolName: schoolName.trim(),
+        schoolName: finalSchoolName,
         principalName: finalPrincipalName,
         mobile: finalMobile
       });
@@ -3435,31 +3440,53 @@ export default function Portal({
             className="space-y-8"
           >
             {/* Header / Welcome Banner */}
-            <div className={`p-8 rounded-3xl shadow-lg relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6 border transition-all ${
+            <div className={`p-6 sm:p-8 rounded-3xl shadow-lg relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6 border transition-all ${
               isDark
                 ? 'bg-gradient-to-r from-[#0b2336] via-[#10304a] to-[#071927] text-white border-[#218caa]/40'
                 : 'bg-gradient-to-r from-[#218caa] via-[#2883a4] to-[#3078a6] text-white border-[#3078a6]/20'
             }`}>
               {/* background design */}
-              <div className="absolute right-0 bottom-0 top-0 w-80 bg-white/5 rounded-l-full blur-3xl" />
+              <div className="absolute right-0 bottom-0 top-0 w-80 bg-white/5 rounded-l-full blur-3xl pointer-events-none" />
               
-              <div className="space-y-3 relative z-10">
+              {/* Right Side (RTL): Principal Greeting */}
+              <div className="space-y-2.5 relative z-10 text-right shrink-0 md:max-w-xs lg:max-w-sm">
                 <span className={`inline-flex items-center gap-1.5 text-[10px] sm:text-xs px-3.5 py-1 rounded-full font-bold border ${
                   isDark ? 'bg-teal-950/60 text-teal-300 border-teal-700/40' : 'bg-emerald-800/40 text-emerald-100 border-emerald-500/25'
                 }`}>
                   <Award className="w-3.5 h-3.5 text-amber-300" />
                   {isRtl ? 'بوابة المدير المعتمدة والآمنة' : 'Verified Principal Portal'}
                 </span>
-                <h1 className="text-2xl sm:text-3xl font-black tracking-tight leading-none">
+                <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight leading-tight">
                   {isRtl ? `مرحباً بك، أ. ${principalSession.principalName}` : `Welcome, Principal ${principalSession.principalName}`}
                 </h1>
-                <p className={`text-xs sm:text-sm max-w-xl font-medium ${isDark ? 'text-teal-200/90' : 'text-emerald-100/90'}`}>
+                <p className={`text-xs sm:text-sm font-medium leading-relaxed ${isDark ? 'text-teal-200/90' : 'text-emerald-100/90'}`}>
                   {isRtl 
                     ? `تتابع الآن استبيانات أولياء الأمور وحل المشكلات لـ: ${principalSession.schoolName} (الرمز الوزاري: ${principalSession.schoolCode})`
                     : `You are monitoring feedback and solving problems for: ${principalSession.schoolName} (Code: ${principalSession.schoolCode})`}
                 </p>
               </div>
 
+              {/* Center Display: School Name (as in Excel) */}
+              <div className="relative z-10 flex flex-col items-center justify-center text-center px-5 py-3.5 sm:px-7 sm:py-4 rounded-2xl bg-white/10 dark:bg-black/30 backdrop-blur-md border border-white/25 dark:border-teal-500/30 shadow-inner max-w-full md:max-w-md my-1 md:my-0">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="p-1 rounded-lg bg-white/20 dark:bg-teal-500/20 text-white dark:text-teal-200">
+                    <School className="w-4 h-4 text-amber-300" />
+                  </span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-100 dark:text-teal-200">
+                    {isRtl ? 'اسم المدرسة' : 'School Name'}
+                  </span>
+                  {principalSession.schoolCode && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-md font-mono font-bold bg-black/25 text-white/90 border border-white/10">
+                      #{principalSession.schoolCode}
+                    </span>
+                  )}
+                </div>
+                <h2 className="text-base sm:text-lg lg:text-xl font-black text-white drop-shadow-sm leading-snug tracking-tight">
+                  {principalSession.schoolName}
+                </h2>
+              </div>
+
+              {/* Left Side: Navigation / Back */}
               <div className="flex flex-wrap gap-2 shrink-0 relative z-10">
                 <button
                   onClick={() => {

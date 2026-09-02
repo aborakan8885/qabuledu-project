@@ -336,5 +336,76 @@
   padding: clamp(1.15rem, 2vw, 2rem);
 }
 
+/* Global Ultra-Bold Typography & Icon Thicken Enhancement for maximum legibility */
+* {
+  font-weight: 700 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.font-extrabold,
+.font-black {
+  font-weight: 900 !important;
+}
+
+button,
+input,
+textarea,
+select,
+option,
+label,
+b,
+strong,
+th {
+  font-weight: 800 !important;
+}
+
+/* Universal Bold Icons - Thicker Stroke Width */
+svg,
+svg path,
+svg circle,
+svg rect,
+svg line,
+svg polyline,
+svg polygon {
+  stroke-width: 2.5px !important;
+}
+
+/* Upgrade faded & dim text colors for high-contrast clarity */
+.text-slate-400,
+.text-gray-400 {
+  color: #475569 !important;
+}
+
+.dark .text-slate-400,
+.dark .text-gray-400 {
+  color: #cbd5e1 !important;
+}
+
+.text-slate-500,
+.text-gray-500 {
+  color: #1e293b !important;
+}
+
+.dark .text-slate-500,
+.dark .text-gray-500 {
+  color: #e2e8f0 !important;
+}
+
+.text-slate-600,
+.text-gray-600 {
+  color: #0f172a !important;
+}
+
+.dark .text-slate-600,
+.dark .text-gray-600 {
+  color: #f1f5f9 !important;
+}
+
+
 
 
