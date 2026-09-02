@@ -10,6 +10,7 @@ import SurveyForm from './components/SurveyForm';
 import Portal from './components/Portal';
 import ErrorBoundary from './components/ErrorBoundary';
 import ContactFeedbackModal from './components/ContactFeedbackModal';
+import SiteAccessGate from './components/SiteAccessGate';
 import { Language, SurveyResponse, AppConfig, EmailLog, SystemIntegrationLog, PrincipalReport, SchoolItem, BeneficiaryFeedback } from './types';
 import { sendOfficialEmail } from './utils/emailService';
 import { getSafeTranslation } from './utils/translationHelper';
@@ -45,6 +46,23 @@ export default function App() {
     const cached = localStorage.getItem('app_theme');
     return (cached === 'dark' || cached === 'light') ? cached : 'light';
   });
+
+  // Site Gate Security: Passcode Protection (10685756280)
+  const [isSiteUnlocked, setIsSiteUnlocked] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return (
+      sessionStorage.getItem('site_access_granted_v1') === 'true' ||
+      localStorage.getItem('site_access_granted_v1') === 'true'
+    );
+  });
+
+  const handleLockSite = () => {
+    try {
+      sessionStorage.removeItem('site_access_granted_v1');
+      localStorage.removeItem('site_access_granted_v1');
+    } catch (_) {}
+    setIsSiteUnlocked(false);
+  };
 
   useEffect(() => {
     localStorage.setItem('app_theme', theme);
@@ -455,6 +473,16 @@ export default function App() {
 
   const handleUpdateConfig = (newConfig: AppConfig) => setConfig(newConfig);
 
+  // Site Passcode Lock Screen (Nothing is displayed until correct password is submitted)
+  if (!isSiteUnlocked) {
+    return (
+      <SiteAccessGate 
+        onUnlock={() => setIsSiteUnlocked(true)} 
+        theme={theme} 
+      />
+    );
+  }
+
   return (
     <div
       className={`min-h-screen flex flex-col font-sans select-none antialiased transition-colors duration-300 ${
@@ -478,6 +506,7 @@ export default function App() {
         canGoBack={historyStackRef.current.length > 0}
         theme={theme}
         onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+        onLockSite={handleLockSite}
         principalSession={principalSession}
       />
 
