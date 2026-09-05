@@ -601,6 +601,7 @@ export default function Portal({
       principalConfirmedStaffing: true,
       sentToSchoolPrincipal: true,
       staffingConfirmedAt: now,
+      finalStaffingConfirmedAt: now,
       archivedAt: now,
       staffingConfirmedBy: principalSession?.principalName || 'مدير المدرسة',
       staffingConfirmedSchoolName: principalSession?.schoolName || survey.schoolName,
@@ -648,6 +649,7 @@ export default function Portal({
       isSecondReturnByPrincipal: isSecondReturn,
       principalReturnReason: reasonClean,
       returnedAt: now,
+      principalReturnedAt: now,
       notes: isRtl
         ? `🚨 أعيد الطلب من مدير المدرسة (${principalSession?.principalName || 'مدير المدرسة'}) بسبب تعذر التسكين وعدم توفر شاغر بالصف/المرحلة. السبب: (${reasonClean}). ظهرت المعاملة أوتوماتيكياً في حساب مسؤول التخطيط لفتح شاغر وفي حساب القيادة المدرسية لمتابعة التسكين.`
         : `Request returned by principal due to no vacancy: ${reasonClean}. Routed to Planning Officer and School Leadership automatically.`
@@ -772,6 +774,7 @@ export default function Portal({
       ...survey,
       staffSatisfaction: staffSat,
       receptionSatisfaction: receptionSat,
+      satisfaction: Math.round((staffSat + receptionSat) / 2),
       generalizeService: genService,
       notes: userNotes || survey.notes,
       isResolved: true,
@@ -855,29 +858,44 @@ export default function Portal({
               
               {/* Card 1: Educational Schools Map (خارطة المدارس التعليمية) */}
               <motion.div
-                whileHover={{ y: -3, scale: 1.01 }}
                 onClick={() => window.open('https://mapedumadinah.com/', '_blank')}
-                className="group relative rounded-2xl portal-card-padding cursor-pointer transition-all flex flex-col justify-between overflow-hidden shadow-sm border bg-white border-slate-200 hover:border-cyan-500 hover:shadow-lg h-full"
+                className={`group relative rounded-2xl portal-card-padding cursor-pointer transition-colors duration-150 flex flex-col justify-between overflow-hidden shadow-sm border h-full ${
+                  isDark
+                    ? 'glass-card-dark hover:bg-[#074738] hover:border-[#0d624e] hover:shadow-xl'
+                    : 'bg-white border-slate-200 hover:bg-[#074738] hover:border-[#0d624e] hover:shadow-xl'
+                }`}
               >
                 {/* Decorative background glow */}
-                <div className="absolute top-0 right-0 w-28 h-28 rounded-full blur-3xl transition-all bg-cyan-500/5 group-hover:bg-cyan-500/10" />
+                <div className={`absolute top-0 right-0 w-28 h-28 rounded-full blur-3xl transition-colors duration-150 ${
+                  isDark ? 'bg-cyan-500/10 group-hover:bg-emerald-500/20' : 'bg-cyan-500/5 group-hover:bg-emerald-500/20'
+                }`} />
                 
                 <div className="space-y-3 sm:space-y-4">
                   {/* Icon and Title in same box/row */}
                   <div className="flex items-center gap-3">
-                    <div className="p-2.5 sm:p-3 rounded-xl shadow-md border bg-cyan-600 border-cyan-500 text-white transition-transform group-hover:scale-105 shrink-0">
+                    <div className={`glass-icon-container p-2.5 sm:p-3 shrink-0 transition-colors duration-150 ${
+                      isDark
+                        ? 'glass-icon-dark-blue group-hover:bg-[#0d624e] group-hover:border-emerald-400 group-hover:text-white'
+                        : 'p-2.5 sm:p-3 rounded-xl shadow-md border bg-cyan-600 border-cyan-500 text-white group-hover:bg-[#0d624e] group-hover:border-emerald-400'
+                    }`}>
                       <Map className="clamp-card-icon" />
                     </div>
-                    <h3 className="clamp-card-title font-black text-slate-800 transition-colors group-hover:text-cyan-700 leading-snug">
+                    <h3 className={`clamp-card-title font-black transition-colors duration-150 leading-snug group-hover:!text-white ${
+                      isDark ? 'text-white' : 'text-slate-800'
+                    }`}>
                       {st('roleMap', isRtl ? 'خارطة المدارس التعليمية' : 'Educational Schools Map')}
                     </h3>
                   </div>
 
                   <div className="space-y-1.5 sm:space-y-2">
-                    <p className="clamp-card-badge font-bold leading-relaxed text-cyan-600">
+                    <p className={`clamp-card-badge font-bold leading-relaxed transition-colors duration-150 group-hover:!text-white ${
+                      isDark ? 'text-cyan-300' : 'text-cyan-600'
+                    }`}>
                       {st('roleMapIndependent', isRtl ? 'رابط خارجي مستقل' : 'Independent External Link')}
                     </p>
-                    <p className="clamp-card-desc font-medium leading-relaxed text-slate-500">
+                    <p className={`clamp-card-desc font-medium leading-relaxed transition-colors duration-150 group-hover:!text-white ${
+                      isDark ? 'text-teal-200/70' : 'text-slate-500'
+                    }`}>
                       {st('roleMapDesc', isRtl 
                         ? 'بوابة مخصصة للمستفيدين لمعرفة المدارس القريبة من المدرسة المرغوبة او المستهدفة بالمسافة للتسجيل أو النقل'
                         : 'A portal dedicated to beneficiaries to find schools near their desired or target school by distance for registration or transfer')}
@@ -885,7 +903,9 @@ export default function Portal({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 pt-4 clamp-card-action font-black text-cyan-600 group-hover:gap-3 transition-all mt-auto">
+                <div className={`flex items-center gap-2 pt-4 clamp-card-action font-black transition-colors duration-150 mt-auto group-hover:!text-white ${
+                  isDark ? 'text-cyan-300' : 'text-cyan-600'
+                }`}>
                   <span>{st('roleMapAction', isRtl ? 'زيارة الخارطة الآن' : 'Visit Map Now')}</span>
                   {isRtl ? <ArrowLeft className="w-4.5 h-4.5 sm:w-5 sm:h-5" /> : <ArrowRight className="w-4.5 h-4.5 sm:w-5 sm:h-5" />}
                 </div>
@@ -893,29 +913,44 @@ export default function Portal({
 
               {/* Card 2: Parent Beneficiary (ولي أمر) */}
               <motion.div
-                whileHover={{ y: -3, scale: 1.01 }}
                 onClick={() => setView('parent-choices')}
-                className="group relative rounded-2xl portal-card-padding cursor-pointer transition-all flex flex-col justify-between overflow-hidden shadow-sm border bg-white border-slate-200 hover:border-blue-500 hover:shadow-lg h-full"
+                className={`group relative rounded-2xl portal-card-padding cursor-pointer transition-colors duration-150 flex flex-col justify-between overflow-hidden shadow-sm border h-full ${
+                  isDark
+                    ? 'glass-card-dark hover:bg-[#074738] hover:border-[#0d624e] hover:shadow-xl'
+                    : 'bg-white border-slate-200 hover:bg-[#074738] hover:border-[#0d624e] hover:shadow-xl'
+                }`}
               >
                 {/* Decorative background glow */}
-                <div className="absolute top-0 right-0 w-28 h-28 rounded-full blur-3xl transition-all bg-blue-500/5 group-hover:bg-blue-500/10" />
+                <div className={`absolute top-0 right-0 w-28 h-28 rounded-full blur-3xl transition-colors duration-150 ${
+                  isDark ? 'bg-blue-500/10 group-hover:bg-emerald-500/20' : 'bg-blue-500/5 group-hover:bg-emerald-500/20'
+                }`} />
                 
                 <div className="space-y-3 sm:space-y-4">
                   {/* Icon and Title in same box/row */}
                   <div className="flex items-center gap-3">
-                    <div className="p-2.5 sm:p-3 rounded-xl shadow-md border bg-blue-600 border-blue-500 text-white transition-transform group-hover:scale-105 shrink-0">
+                    <div className={`glass-icon-container p-2.5 sm:p-3 shrink-0 transition-colors duration-150 ${
+                      isDark
+                        ? 'glass-icon-dark-blue group-hover:bg-[#0d624e] group-hover:border-emerald-400 group-hover:text-white'
+                        : 'p-2.5 sm:p-3 rounded-xl shadow-md border bg-blue-600 border-blue-500 text-white group-hover:bg-[#0d624e] group-hover:border-emerald-400'
+                    }`}>
                       <Users className="clamp-card-icon" />
                     </div>
-                    <h3 className="clamp-card-title font-black text-slate-800 transition-colors group-hover:text-blue-700 leading-snug">
+                    <h3 className={`clamp-card-title font-black transition-colors duration-150 leading-snug group-hover:!text-white ${
+                      isDark ? 'text-white' : 'text-slate-800'
+                    }`}>
                       {st('roleParent', isRtl ? 'مستفيد ولي أمر' : 'Parent Beneficiary')}
                     </h3>
                   </div>
 
                   <div className="space-y-1.5 sm:space-y-2">
-                    <p className="clamp-card-badge font-bold leading-relaxed text-blue-600">
+                    <p className={`clamp-card-badge font-bold leading-relaxed transition-colors duration-150 group-hover:!text-white ${
+                      isDark ? 'text-teal-300' : 'text-blue-600'
+                    }`}>
                       {isRtl ? 'دخول مباشر بدون حساب' : 'Direct access without registration'}
                     </p>
-                    <p className="clamp-card-desc font-medium leading-relaxed text-slate-500">
+                    <p className={`clamp-card-desc font-medium leading-relaxed transition-colors duration-150 group-hover:!text-white ${
+                      isDark ? 'text-teal-200/70' : 'text-slate-500'
+                    }`}>
                       {st('roleParentDesc', isRtl 
                         ? 'تقديم بلاغ، استفسار أو متابعة حالة طلبات القبول والتسجيل والنقل المدرسي وتعديل الرغبات'
                         : 'Submit report, inquiry or track admission, registration and school transfer requests status')}
@@ -923,7 +958,9 @@ export default function Portal({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 pt-4 clamp-card-action font-black text-blue-600 group-hover:gap-3 transition-all mt-auto">
+                <div className={`flex items-center gap-2 pt-4 clamp-card-action font-black transition-colors duration-150 mt-auto group-hover:!text-white ${
+                  isDark ? 'text-teal-300' : 'text-blue-600'
+                }`}>
                   <span>{isRtl ? 'بدء الخدمة الآن' : 'Start Service Now'}</span>
                   {isRtl ? <ArrowLeft className="w-4.5 h-4.5 sm:w-5 sm:h-5" /> : <ArrowRight className="w-4.5 h-4.5 sm:w-5 sm:h-5" />}
                 </div>
@@ -931,33 +968,48 @@ export default function Portal({
 
               {/* Card 3: School Principal Beneficiary (مدير مدرسة) */}
               <motion.div
-                whileHover={{ y: -3, scale: 1.01 }}
                 onClick={() => {
                   setView('principal-login');
                   setPrincipalAuthMode('login');
                   setLoginError('');
                 }}
-                className="group relative rounded-2xl portal-card-padding cursor-pointer transition-all flex flex-col justify-between overflow-hidden shadow-sm border bg-white border-slate-200 hover:border-emerald-500 hover:shadow-lg h-full"
+                className={`group relative rounded-2xl portal-card-padding cursor-pointer transition-colors duration-150 flex flex-col justify-between overflow-hidden shadow-sm border h-full ${
+                  isDark
+                    ? 'glass-card-dark hover:bg-[#074738] hover:border-[#0d624e] hover:shadow-xl'
+                    : 'bg-white border-slate-200 hover:bg-[#074738] hover:border-[#0d624e] hover:shadow-xl'
+                }`}
               >
                 {/* Decorative background glow */}
-                <div className="absolute top-0 right-0 w-28 h-28 rounded-full blur-3xl transition-all bg-emerald-500/5 group-hover:bg-emerald-500/10" />
+                <div className={`absolute top-0 right-0 w-28 h-28 rounded-full blur-3xl transition-colors duration-150 ${
+                  isDark ? 'bg-emerald-500/10 group-hover:bg-emerald-500/20' : 'bg-emerald-500/5 group-hover:bg-emerald-500/20'
+                }`} />
                 
                 <div className="space-y-3 sm:space-y-4">
                   {/* Icon and Title in same box/row */}
                   <div className="flex items-center gap-3">
-                    <div className="p-2.5 sm:p-3 rounded-xl shadow-md border bg-emerald-600 border-emerald-500 text-white transition-transform group-hover:scale-105 shrink-0">
+                    <div className={`glass-icon-container p-2.5 sm:p-3 shrink-0 transition-colors duration-150 ${
+                      isDark
+                        ? 'glass-icon-dark-emerald group-hover:bg-[#0d624e] group-hover:border-emerald-400 group-hover:text-white'
+                        : 'p-2.5 sm:p-3 rounded-xl shadow-md border bg-emerald-600 border-emerald-500 text-white group-hover:bg-[#0d624e] group-hover:border-emerald-400'
+                    }`}>
                       <School className="clamp-card-icon" />
                     </div>
-                    <h3 className="clamp-card-title font-black text-slate-800 transition-colors group-hover:text-emerald-700 leading-snug">
+                    <h3 className={`clamp-card-title font-black transition-colors duration-150 leading-snug group-hover:!text-white ${
+                      isDark ? 'text-white' : 'text-slate-800'
+                    }`}>
                       {st('rolePrincipal', isRtl ? 'مستفيد مدير مدرسة' : 'School Principal')}
                     </h3>
                   </div>
 
                   <div className="space-y-1.5 sm:space-y-2">
-                    <p className="clamp-card-badge font-bold leading-relaxed text-emerald-600">
+                    <p className={`clamp-card-badge font-bold leading-relaxed transition-colors duration-150 group-hover:!text-white ${
+                      isDark ? 'text-emerald-300' : 'text-emerald-600'
+                    }`}>
                       {isRtl ? 'يتطلب رمز أمن' : 'Requires secure code'}
                     </p>
-                    <p className="clamp-card-desc font-medium leading-relaxed text-slate-500">
+                    <p className={`clamp-card-desc font-medium leading-relaxed transition-colors duration-150 group-hover:!text-white ${
+                      isDark ? 'text-teal-200/70' : 'text-slate-500'
+                    }`}>
                       {st('rolePrincipalDesc', isRtl 
                         ? 'بوابة مخصصة لمدراء المدارس للإبلاغ عن الشواغر المتاحة وتحديث بيانات الفصول الدراسية وتأكيد رغبات القبول'
                         : 'Dedicated portal for school principals to report available vacancies, update class data, and confirm admission desires')}
@@ -965,7 +1017,9 @@ export default function Portal({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 pt-4 clamp-card-action font-black text-emerald-600 group-hover:gap-3 transition-all mt-auto">
+                <div className={`flex items-center gap-2 pt-4 clamp-card-action font-black transition-colors duration-150 mt-auto group-hover:!text-white ${
+                  isDark ? 'text-emerald-300' : 'text-emerald-600'
+                }`}>
                   <span>{isRtl ? 'تسجيل الدخول للمدرسة' : 'School Login'}</span>
                   {isRtl ? <ArrowLeft className="w-4.5 h-4.5 sm:w-5 sm:h-5" /> : <ArrowRight className="w-4.5 h-4.5 sm:w-5 sm:h-5" />}
                 </div>
@@ -973,29 +1027,44 @@ export default function Portal({
 
               {/* Card 4: Department Staff (منسوبي الإدارة) */}
               <motion.div
-                whileHover={{ y: -3, scale: 1.01 }}
                 onClick={() => setView('admin-login')}
-                className="group relative rounded-2xl portal-card-padding cursor-pointer transition-all flex flex-col justify-between overflow-hidden shadow-sm border bg-white border-slate-200 hover:border-indigo-500 hover:shadow-lg h-full"
+                className={`group relative rounded-2xl portal-card-padding cursor-pointer transition-colors duration-150 flex flex-col justify-between overflow-hidden shadow-sm border h-full ${
+                  isDark
+                    ? 'glass-card-dark hover:bg-[#074738] hover:border-[#0d624e] hover:shadow-xl'
+                    : 'bg-white border-slate-200 hover:bg-[#074738] hover:border-[#0d624e] hover:shadow-xl'
+                }`}
               >
                 {/* Decorative background glow */}
-                <div className="absolute top-0 right-0 w-28 h-28 rounded-full blur-3xl transition-all bg-indigo-500/5 group-hover:bg-indigo-500/10" />
+                <div className={`absolute top-0 right-0 w-28 h-28 rounded-full blur-3xl transition-colors duration-150 ${
+                  isDark ? 'bg-indigo-500/10 group-hover:bg-emerald-500/20' : 'bg-indigo-500/5 group-hover:bg-emerald-500/20'
+                }`} />
                 
                 <div className="space-y-3 sm:space-y-4">
                   {/* Icon and Title in same box/row */}
                   <div className="flex items-center gap-3">
-                    <div className="p-2.5 sm:p-3 rounded-xl shadow-md border bg-indigo-600 border-indigo-500 text-white transition-transform group-hover:scale-105 shrink-0">
+                    <div className={`glass-icon-container p-2.5 sm:p-3 shrink-0 transition-colors duration-150 ${
+                      isDark
+                        ? 'glass-icon-dark-indigo group-hover:bg-[#0d624e] group-hover:border-emerald-400 group-hover:text-white'
+                        : 'p-2.5 sm:p-3 rounded-xl shadow-md border bg-indigo-600 border-indigo-500 text-white group-hover:bg-[#0d624e] group-hover:border-emerald-400'
+                    }`}>
                       <ShieldCheck className="clamp-card-icon" />
                     </div>
-                    <h3 className="clamp-card-title font-black text-slate-800 transition-colors group-hover:text-indigo-700 leading-snug">
+                    <h3 className={`clamp-card-title font-black transition-colors duration-150 leading-snug group-hover:!text-white ${
+                      isDark ? 'text-white' : 'text-slate-800'
+                    }`}>
                       {isRtl ? 'منسوبي الإدارة' : 'Department Staff'}
                     </h3>
                   </div>
 
                   <div className="space-y-1.5 sm:space-y-2">
-                    <p className="clamp-card-badge font-bold leading-relaxed text-indigo-600">
+                    <p className={`clamp-card-badge font-bold leading-relaxed transition-colors duration-150 group-hover:!text-white ${
+                      isDark ? 'text-indigo-300' : 'text-indigo-600'
+                    }`}>
                       {isRtl ? 'بوابة إدارة وحوكمة الأنظمة والتحليلات' : 'Administrative governance & analytics'}
                     </p>
-                    <p className="clamp-card-desc font-medium leading-relaxed text-slate-500">
+                    <p className={`clamp-card-desc font-medium leading-relaxed transition-colors duration-150 group-hover:!text-white ${
+                      isDark ? 'text-teal-200/70' : 'text-slate-500'
+                    }`}>
                       {isRtl
                         ? 'بوابة الدخول للمصرح لهم من منسوبي الإدارة العامة للتعليم بمنطقة المدينة المنورة'
                         : 'Entry portal for authorized staff of the General Administration of Education in Madinah Region'}
@@ -1003,7 +1072,9 @@ export default function Portal({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 pt-4 clamp-card-action font-black text-indigo-600 group-hover:gap-3 transition-all mt-auto">
+                <div className={`flex items-center gap-2 pt-4 clamp-card-action font-black transition-colors duration-150 mt-auto group-hover:!text-white ${
+                  isDark ? 'text-indigo-300' : 'text-indigo-600'
+                }`}>
                   <span>{isRtl ? 'تسجيل الدخول لمنسوبي الإدارة' : 'Department Staff Login'}</span>
                   {isRtl ? <ArrowLeft className="w-4.5 h-4.5 sm:w-5 sm:h-5" /> : <ArrowRight className="w-4.5 h-4.5 sm:w-5 sm:h-5" />}
                 </div>
@@ -1531,7 +1602,6 @@ export default function Portal({
               
               {/* Option A: Submit Request */}
               <motion.div
-                whileHover={{ y: -6, scale: 1.01 }}
                 onClick={() => {
                   handleActionWithMapWarning(() => {
                     try {
@@ -1540,29 +1610,29 @@ export default function Portal({
                     setShowAgeModal(true);
                   });
                 }}
-                className={`group relative rounded-3xl p-5 cursor-pointer transition-all flex flex-col justify-between overflow-hidden shadow-xs border ${
+                className={`group relative rounded-3xl p-5 cursor-pointer transition-colors duration-150 flex flex-col justify-between overflow-hidden shadow-xs border ${
                   isDark
-                    ? 'glass-card-dark hover:border-teal-400 hover:shadow-teal-500/5'
-                    : 'bg-white border-slate-200 hover:border-blue-500 hover:shadow-xl'
+                    ? 'glass-card-dark hover:bg-[#074738] hover:border-[#0d624e] hover:shadow-xl'
+                    : 'bg-white border-slate-200 hover:bg-[#074738] hover:border-[#0d624e] hover:shadow-xl'
                 }`}
               >
-                <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl transition-all ${
-                  isDark ? 'bg-teal-500/5 group-hover:bg-teal-500/10' : 'bg-blue-500/5 group-hover:bg-blue-500/10'
+                <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl transition-colors duration-150 ${
+                  isDark ? 'bg-teal-500/5 group-hover:bg-emerald-500/20' : 'bg-blue-500/5 group-hover:bg-emerald-500/20'
                 }`} />
 
                 <div className="space-y-5">
-                  <div className={`glass-icon-container p-3.5 ${
-                    isDark ? 'glass-icon-dark-blue group-hover:bg-teal-400 group-hover:text-[#061c24]' : 'glass-icon-light-blue group-hover:bg-blue-600 group-hover:text-white'
+                  <div className={`glass-icon-container p-3.5 transition-colors duration-150 ${
+                    isDark ? 'glass-icon-dark-blue group-hover:bg-[#0d624e] group-hover:border-emerald-400 group-hover:text-white' : 'glass-icon-light-blue group-hover:bg-[#0d624e] group-hover:border-emerald-400 group-hover:text-white'
                   }`}>
                     <Plus className="w-7 h-7" />
                   </div>
                   <div className="space-y-1.5">
-                    <h3 className={`font-extrabold text-lg transition-colors ${
-                      isDark ? 'text-white group-hover:text-teal-300' : 'text-slate-800 group-hover:text-blue-600'
+                    <h3 className={`font-extrabold text-lg transition-colors duration-150 group-hover:!text-white ${
+                      isDark ? 'text-white' : 'text-slate-800'
                     }`}>
                       {isRtl ? 'تقديم طلب جديد' : 'Submit New Request'}
                     </h3>
-                    <p className={`text-xs font-medium leading-relaxed pt-1 ${isDark ? 'text-teal-200/70' : 'text-slate-500'}`}>
+                    <p className={`text-xs font-medium leading-relaxed pt-1 transition-colors duration-150 group-hover:!text-white ${isDark ? 'text-teal-200/70' : 'text-slate-500'}`}>
                       {isRtl 
                         ? 'تعبئة استبيان قياس الرضا وتقديم بلاغ أو شكوى جديدة بخصوص القبول والتوجيه.' 
                         : 'Fill out the satisfaction survey and submit a new report or inquiry regarding admission.'}
@@ -1570,7 +1640,7 @@ export default function Portal({
                   </div>
                 </div>
 
-                <div className={`flex items-center gap-2 pt-6 font-bold text-xs group-hover:gap-3 transition-all ${
+                <div className={`flex items-center gap-2 pt-6 font-bold text-xs transition-colors duration-150 group-hover:!text-white ${
                   isDark ? 'text-teal-300' : 'text-blue-600'
                 }`}>
                   <span>{isRtl ? 'بدء تقديم الطلب' : 'Start Submission'}</span>
@@ -1580,7 +1650,6 @@ export default function Portal({
 
               {/* Option B: Transfer Student Request */}
               <motion.div
-                whileHover={{ y: -6, scale: 1.01 }}
                 onClick={() => {
                   handleActionWithMapWarning(() => {
                     try {
@@ -1589,43 +1658,43 @@ export default function Portal({
                     onSelectRole('parent');
                   });
                 }}
-                className={`group relative rounded-3xl p-5 cursor-pointer transition-all flex flex-col justify-between overflow-hidden shadow-xs border ${
+                className={`group relative rounded-3xl p-5 cursor-pointer transition-colors duration-150 flex flex-col justify-between overflow-hidden shadow-xs border ${
                   isDark
-                    ? 'glass-card-dark hover:border-emerald-400 hover:shadow-emerald-500/5'
-                    : 'bg-white border-slate-200 hover:border-emerald-500 hover:shadow-xl'
+                    ? 'glass-card-dark hover:bg-[#074738] hover:border-[#0d624e] hover:shadow-xl'
+                    : 'bg-white border-slate-200 hover:bg-[#074738] hover:border-[#0d624e] hover:shadow-xl'
                 }`}
               >
-                <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl transition-all ${
-                  isDark ? 'bg-emerald-500/5 group-hover:bg-emerald-500/10' : 'bg-emerald-500/5 group-hover:bg-emerald-500/10'
+                <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl transition-colors duration-150 ${
+                  isDark ? 'bg-emerald-500/5 group-hover:bg-emerald-500/20' : 'bg-emerald-500/5 group-hover:bg-emerald-500/20'
                 }`} />
 
                 <div className="space-y-5">
-                  <div className={`glass-icon-container p-3.5 ${
-                    isDark ? 'glass-icon-dark-blue group-hover:bg-emerald-400 group-hover:text-[#061c24]' : 'glass-icon-light-blue group-hover:bg-emerald-600 group-hover:text-white'
+                  <div className={`glass-icon-container p-3.5 transition-colors duration-150 ${
+                    isDark ? 'glass-icon-dark-blue group-hover:bg-[#0d624e] group-hover:border-emerald-400 group-hover:text-white' : 'glass-icon-light-blue group-hover:bg-[#0d624e] group-hover:border-emerald-400 group-hover:text-white'
                   }`}>
                     <ArrowRightLeft className="w-7 h-7" />
                   </div>
                   <div className="space-y-1.5">
-                    <h3 className={`font-extrabold text-lg transition-colors flex flex-wrap items-center gap-1.5 ${
-                      isDark ? 'text-white group-hover:text-emerald-300' : 'text-slate-800 group-hover:text-emerald-600'
+                    <h3 className={`font-extrabold text-lg transition-colors duration-150 group-hover:!text-white flex flex-wrap items-center gap-1.5 ${
+                      isDark ? 'text-white' : 'text-slate-800'
                     }`}>
                       {isRtl ? (
                         <>
                           <span>طلب نقل طالب</span>
-                          <span className="inline-block px-2.5 py-0.5 text-xs sm:text-sm font-black rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shadow-xs">
+                          <span className="inline-block px-2.5 py-0.5 text-xs sm:text-sm font-black rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shadow-xs group-hover:!text-white group-hover:bg-white/20">
                             ومعادلة المؤهلات
                           </span>
                         </>
                       ) : (
                         <>
                           <span>Transfer Student Request</span>
-                          <span className="inline-block px-2 py-0.5 text-xs font-black rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                          <span className="inline-block px-2 py-0.5 text-xs font-black rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 group-hover:!text-white group-hover:bg-white/20">
                             & Qualifications
                           </span>
                         </>
                       )}
                     </h3>
-                    <p className={`text-xs font-medium leading-relaxed pt-1 ${isDark ? 'text-teal-200/70' : 'text-slate-500'}`}>
+                    <p className={`text-xs font-medium leading-relaxed pt-1 transition-colors duration-150 group-hover:!text-white ${isDark ? 'text-teal-200/70' : 'text-slate-500'}`}>
                       {isRtl 
                         ? 'تقديم طلب نقل طالب إلى مدرسة أخرى، أو تقديم طلب معادلة المؤهلات الدراسية.' 
                         : 'Submit student transfer to another school or qualification equivalency request.'}
@@ -1633,7 +1702,7 @@ export default function Portal({
                   </div>
                 </div>
 
-                <div className={`flex items-center gap-2 pt-6 font-bold text-xs group-hover:gap-3 transition-all ${
+                <div className={`flex items-center gap-2 pt-6 font-bold text-xs transition-colors duration-150 group-hover:!text-white ${
                   isDark ? 'text-emerald-300' : 'text-emerald-600'
                 }`}>
                   <span>{isRtl ? 'تقديم طلب نقل' : 'Apply for Transfer'}</span>
@@ -1643,31 +1712,30 @@ export default function Portal({
 
               {/* Option C: Track Request by Name */}
               <motion.div
-                whileHover={{ y: -6, scale: 1.01 }}
                 onClick={() => setView('parent-track')}
-                className={`group relative rounded-3xl p-5 cursor-pointer transition-all flex flex-col justify-between overflow-hidden shadow-xs border ${
+                className={`group relative rounded-3xl p-5 cursor-pointer transition-colors duration-150 flex flex-col justify-between overflow-hidden shadow-xs border ${
                   isDark
-                    ? 'glass-card-dark hover:border-amber-400 hover:shadow-amber-500/5'
-                    : 'bg-white border-slate-200 hover:border-amber-500 hover:shadow-xl'
+                    ? 'glass-card-dark hover:bg-[#074738] hover:border-[#0d624e] hover:shadow-xl'
+                    : 'bg-white border-slate-200 hover:bg-[#074738] hover:border-[#0d624e] hover:shadow-xl'
                 }`}
               >
-                <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl transition-all ${
-                  isDark ? 'bg-amber-500/5 group-hover:bg-amber-500/10' : 'bg-amber-500/5 group-hover:bg-amber-500/10'
+                <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl transition-colors duration-150 ${
+                  isDark ? 'bg-amber-500/5 group-hover:bg-emerald-500/20' : 'bg-amber-500/5 group-hover:bg-emerald-500/20'
                 }`} />
 
                 <div className="space-y-5">
-                  <div className={`glass-icon-container p-3.5 ${
-                    isDark ? 'glass-icon-dark-indigo group-hover:bg-amber-400 group-hover:text-[#061c24]' : 'glass-icon-light-indigo group-hover:bg-amber-600 group-hover:text-white'
+                  <div className={`glass-icon-container p-3.5 transition-colors duration-150 ${
+                    isDark ? 'glass-icon-dark-indigo group-hover:bg-[#0d624e] group-hover:border-emerald-400 group-hover:text-white' : 'glass-icon-light-indigo group-hover:bg-[#0d624e] group-hover:border-emerald-400 group-hover:text-white'
                   }`}>
                     <Eye className="w-7 h-7" />
                   </div>
                   <div className="space-y-1.5">
-                    <h3 className={`font-extrabold text-lg transition-colors ${
-                      isDark ? 'text-white group-hover:text-amber-300' : 'text-slate-800 group-hover:text-amber-600'
+                    <h3 className={`font-extrabold text-lg transition-colors duration-150 group-hover:!text-white ${
+                      isDark ? 'text-white' : 'text-slate-800'
                     }`}>
                       {isRtl ? 'متابعة الطلب والتقييم بالاسم' : 'Track & Evaluate Request by Name'}
                     </h3>
-                    <p className={`text-xs font-medium leading-relaxed pt-1 ${isDark ? 'text-teal-200/70' : 'text-slate-500'}`}>
+                    <p className={`text-xs font-medium leading-relaxed pt-1 transition-colors duration-150 group-hover:!text-white ${isDark ? 'text-teal-200/70' : 'text-slate-500'}`}>
                       {isRtl 
                         ? 'الاستعلام الفوري عن حالة المعالجة للطلب الخاص بك باسمك، وتعبئة التقييم مباشرة.' 
                         : 'Check resolution status instantly using the beneficiary’s name and complete the rating.'}
@@ -1675,7 +1743,7 @@ export default function Portal({
                   </div>
                 </div>
 
-                <div className={`flex items-center gap-2 pt-6 font-bold text-xs group-hover:gap-3 transition-all ${
+                <div className={`flex items-center gap-2 pt-6 font-bold text-xs transition-colors duration-150 group-hover:!text-white ${
                   isDark ? 'text-amber-300' : 'text-amber-600'
                 }`}>
                   <span>{isRtl ? 'متابعة وتقييم الآن' : 'Track & Rate Now'}</span>

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { RequestDispatchTimeline } from './RequestDispatchTimeline';
+import { checkRequestDelayStatus, getDelayedRequests } from '../utils/delayUtils';
 import { 
   Users, 
   Search, 
@@ -321,6 +322,11 @@ export default function Dashboard({
     return surveys.filter(s => isSurveyEqualizationRequest(s));
   }, [surveys]);
 
+  // Delayed requests over 2 business days list
+  const delayedRequestsList = useMemo(() => {
+    return getDelayedRequests(surveys);
+  }, [surveys]);
+
   // Live KPI Calculations
   const stats = useMemo(() => {
     const total = surveys.length;
@@ -353,10 +359,20 @@ export default function Dashboard({
 
   // Dynamic workflow count calculations for Admission & Transfer
   const workflowCounts = useMemo(() => {
+    const isSentToSchool = (s: SurveyResponse) => Boolean(
+      s.sentToSchoolPrincipal || 
+      s.vacancyRequestStatus === 'vacancy_opened' ||
+      s.vacancyRequestStatus === 'sent_to_school_principal' ||
+      s.vacancyRequestStatus === 'approved' ||
+      s.vacancyRequestStatus === 'staffing_confirmed' ||
+      s.vacancyRequestStatus === 'executed'
+    );
+
     return {
       all: admissionSurveys.length,
-      new: admissionSurveys.filter(s => !s.isResolved && !s.sentToSchoolPrincipal && !s.sentToLeadership && (!s.serviceEmployee || s.serviceEmployee === 'غير مسند')).length,
-      my: admissionSurveys.filter(s => s.serviceEmployee === activeOfficer.nameAr || s.assignedOfficerId === activeOfficer.id).length,
+      new: admissionSurveys.filter(s => !s.isResolved && !isSentToSchool(s) && (!s.serviceEmployee || s.serviceEmployee === 'غير مسند')).length,
+      my: admissionSurveys.filter(s => (s.serviceEmployee === activeOfficer.nameAr || s.assignedOfficerId === activeOfficer.id) && !s.isResolved && !isSentToSchool(s)).length,
+      sentToSchool: admissionSurveys.filter(s => !s.isResolved && isSentToSchool(s)).length,
       leadership: admissionSurveys.filter(s => !!s.sentToLeadership).length,
       vacancy: admissionSurveys.filter(s => s.vacancyRequestStatus === 'vacancy_opened' || s.isVacancyRequest).length,
       principal: admissionSurveys.filter(s => !!s.sentToSchoolPrincipal).length,
@@ -367,21 +383,21 @@ export default function Dashboard({
 
   // Dynamic workflow counts for Equivalency Requests
   const equivalencyWorkflowCounts = useMemo(() => {
-    const isSentToPlanningOrSchool = (s: SurveyResponse) => Boolean(
-      s.isVacancyRequest || 
-      s.sentToPlanningOfficer || 
+    const isSentToSchool = (s: SurveyResponse) => Boolean(
       s.sentToSchoolPrincipal || 
-      s.vacancyRequestStatus === 'pending' || 
-      s.vacancyRequestStatus === 'vacancy_opened' || 
-      s.referredToPlanningAt
+      s.vacancyRequestStatus === 'vacancy_opened' ||
+      s.vacancyRequestStatus === 'sent_to_school_principal' ||
+      s.vacancyRequestStatus === 'approved' ||
+      s.vacancyRequestStatus === 'staffing_confirmed' ||
+      s.vacancyRequestStatus === 'executed'
     );
 
     return {
       all: equivalencySurveys.length,
       new: equivalencySurveys.filter(s => !s.isResolved && (!s.serviceEmployee || s.serviceEmployee === 'غير مسند')).length,
-      my: equivalencySurveys.filter(s => (s.serviceEmployee === activeOfficer.nameAr || s.assignedOfficerId === activeOfficer.id) && !s.isResolved && !s.appointmentConfirmedByBeneficiary && !isSentToPlanningOrSchool(s)).length,
-      confirmed: equivalencySurveys.filter(s => Boolean(s.appointmentConfirmedByBeneficiary) && !s.isResolved && !isSentToPlanningOrSchool(s)).length,
-      sentToSchool: equivalencySurveys.filter(s => !s.isResolved && isSentToPlanningOrSchool(s)).length,
+      my: equivalencySurveys.filter(s => (s.serviceEmployee === activeOfficer.nameAr || s.assignedOfficerId === activeOfficer.id) && !s.isResolved && !s.appointmentConfirmedByBeneficiary && !isSentToSchool(s)).length,
+      confirmed: equivalencySurveys.filter(s => Boolean(s.appointmentConfirmedByBeneficiary) && !s.isResolved && !isSentToSchool(s)).length,
+      sentToSchool: equivalencySurveys.filter(s => !s.isResolved && isSentToSchool(s)).length,
       archive: equivalencySurveys.filter(s => s.isResolved).length,
       primary: equivalencySurveys.filter(s => s.stage === 'Primary' || s.equalizationStage === 'primary').length,
       intermediate: equivalencySurveys.filter(s => s.stage === 'Intermediate' || s.equalizationStage === 'intermediate').length,
@@ -415,11 +431,21 @@ export default function Dashboard({
 
       // Workflow status
       let matchesWorkflow = true;
-      if (workflowStatus === 'new') matchesWorkflow = !s.isResolved && !s.sentToSchoolPrincipal && !s.sentToLeadership && (!s.serviceEmployee || s.serviceEmployee === 'غير مسند');
-      if (workflowStatus === 'my') matchesWorkflow = s.serviceEmployee === activeOfficer.nameAr || s.assignedOfficerId === activeOfficer.id;
+      const isSentToSchool = (s: SurveyResponse) => Boolean(
+        s.sentToSchoolPrincipal || 
+        s.vacancyRequestStatus === 'vacancy_opened' ||
+        s.vacancyRequestStatus === 'sent_to_school_principal' ||
+        s.vacancyRequestStatus === 'approved' ||
+        s.vacancyRequestStatus === 'staffing_confirmed' ||
+        s.vacancyRequestStatus === 'executed'
+      );
+
+      if (workflowStatus === 'new') matchesWorkflow = !s.isResolved && !isSentToSchool(s) && (!s.serviceEmployee || s.serviceEmployee === 'غير مسند');
+      if (workflowStatus === 'my') matchesWorkflow = (s.serviceEmployee === activeOfficer.nameAr || s.assignedOfficerId === activeOfficer.id) && !s.isResolved && !isSentToSchool(s);
+      if (workflowStatus === 'sent_to_school') matchesWorkflow = !s.isResolved && isSentToSchool(s);
       if (workflowStatus === 'leadership') matchesWorkflow = !!s.sentToLeadership;
-      if (workflowStatus === 'principal') matchesWorkflow = !!s.sentToSchoolPrincipal;
       if (workflowStatus === 'vacancy') matchesWorkflow = s.vacancyRequestStatus === 'vacancy_opened' || !!s.isVacancyRequest;
+      if (workflowStatus === 'principal') matchesWorkflow = !!s.sentToSchoolPrincipal;
       if (workflowStatus === 'placement') matchesWorkflow = !!s.staffingConfirmedAt || !!s.principalConfirmedStaffing;
       if (workflowStatus === 'archive') matchesWorkflow = s.isResolved;
 
@@ -464,19 +490,19 @@ export default function Dashboard({
 
       // Workflow status
       let matchesWorkflow = true;
-      const isSentToPlanningOrSchool = (s: SurveyResponse) => Boolean(
-        s.isVacancyRequest || 
-        s.sentToPlanningOfficer || 
+      const isSentToSchool = (s: SurveyResponse) => Boolean(
         s.sentToSchoolPrincipal || 
-        s.vacancyRequestStatus === 'pending' || 
-        s.vacancyRequestStatus === 'vacancy_opened' || 
-        s.referredToPlanningAt
+        s.vacancyRequestStatus === 'vacancy_opened' ||
+        s.vacancyRequestStatus === 'sent_to_school_principal' ||
+        s.vacancyRequestStatus === 'approved' ||
+        s.vacancyRequestStatus === 'staffing_confirmed' ||
+        s.vacancyRequestStatus === 'executed'
       );
 
       if (eqWorkflowStatus === 'new') matchesWorkflow = !s.isResolved && (!s.serviceEmployee || s.serviceEmployee === 'غير مسند');
-      if (eqWorkflowStatus === 'my') matchesWorkflow = (s.serviceEmployee === activeOfficer.nameAr || s.assignedOfficerId === activeOfficer.id) && !s.isResolved && !s.appointmentConfirmedByBeneficiary && !isSentToPlanningOrSchool(s);
-      if (eqWorkflowStatus === 'confirmed') matchesWorkflow = Boolean(s.appointmentConfirmedByBeneficiary) && !s.isResolved && !isSentToPlanningOrSchool(s);
-      if (eqWorkflowStatus === 'sent_to_school') matchesWorkflow = !s.isResolved && isSentToPlanningOrSchool(s);
+      if (eqWorkflowStatus === 'my') matchesWorkflow = (s.serviceEmployee === activeOfficer.nameAr || s.assignedOfficerId === activeOfficer.id) && !s.isResolved && !s.appointmentConfirmedByBeneficiary && !isSentToSchool(s);
+      if (eqWorkflowStatus === 'confirmed') matchesWorkflow = Boolean(s.appointmentConfirmedByBeneficiary) && !s.isResolved && !isSentToSchool(s);
+      if (eqWorkflowStatus === 'sent_to_school') matchesWorkflow = !s.isResolved && isSentToSchool(s);
       if (eqWorkflowStatus === 'archive') matchesWorkflow = s.isResolved;
 
       return matchesSearch && matchesStage && matchesAppointment && matchesResolution && matchesOfficer && matchesWorkflow;
@@ -553,29 +579,52 @@ export default function Dashboard({
     setTimeout(() => setClaimToastMessage(null), 4000);
   };
 
-  // File Upload Handler for Equivalency Certificates from Device
+  // File Upload Handler for Equivalency Certificates from Device (Allows multiple files > 3)
   const handleFileUpload = (survey: SurveyResponse, event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const fileList = event.target.files;
+    if (!fileList || fileList.length === 0) return;
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const base64Data = e.target?.result as string;
-      const newAttachment = {
-        name: file.name,
-        type: file.type || 'application/pdf',
-        data: base64Data
-      };
-      const updatedAttachments = [...(survey.attachments || []), newAttachment];
+    const filesArray = Array.from(fileList);
+    const promises = filesArray.map(file => {
+      return new Promise<{ name: string; type: string; data: string }>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          resolve({
+            name: file.name,
+            type: file.type || 'application/pdf',
+            data: e.target?.result as string
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
+    Promise.all(promises).then((newAttachments) => {
+      const updatedAttachments = [...(survey.attachments || []), ...newAttachments];
+      const uploadedNames = filesArray.map(f => f.name).join('، ');
       onUpdateSurvey({
         ...survey,
         attachments: updatedAttachments,
-        equalizationNotes: `${survey.equalizationNotes || ''}\nتم إرفاق ملف المعادلة: ${file.name} بتاريخ ${new Date().toLocaleDateString('ar-SA')}`
+        equalizationNotes: `${survey.equalizationNotes || ''}\nتم إرفاق ملفات المعادلة (${filesArray.length}): ${uploadedNames} بتاريخ ${new Date().toLocaleDateString('ar-SA')}`
       });
-      setClaimToastMessage(`تم رفع وتوثيق ملف المعادلة بنجاح: ${file.name} 📤`);
+      setClaimToastMessage(`تم رفع وتوثيق (${filesArray.length}) ملف/ملفات معادلة بنجاح 📤 (المجموع الحالي: ${updatedAttachments.length})`);
       setTimeout(() => setClaimToastMessage(null), 4000);
-    };
-    reader.readAsDataURL(file);
+    });
+
+    event.target.value = '';
+  };
+
+  // Delete individual attachment handler
+  const handleDeleteAttachment = (survey: SurveyResponse, indexToDelete: number) => {
+    const currentAttachments = survey.attachments || [];
+    const removedItem = currentAttachments[indexToDelete];
+    const updatedAttachments = currentAttachments.filter((_, idx) => idx !== indexToDelete);
+    onUpdateSurvey({
+      ...survey,
+      attachments: updatedAttachments
+    });
+    setClaimToastMessage(`تم حذف الملف المرفق: ${removedItem?.name || ''} 🗑️`);
+    setTimeout(() => setClaimToastMessage(null), 3000);
   };
 
   // Assign To Officer Handler
@@ -1369,6 +1418,35 @@ export default function Dashboard({
            </div>
         </div>
 
+        {/* Urgent 2-Business-Days Delayed Requests Alert Banner on Main Screen */}
+        {delayedRequestsList.length > 0 && (
+           <div className="p-5 rounded-3xl bg-gradient-to-r from-rose-600 via-rose-700 to-red-800 text-white shadow-xl shadow-rose-600/30 border-2 border-rose-400 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-pulse">
+              <div className="flex items-center gap-3">
+                 <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+                    <ShieldAlert className="w-7 h-7 text-white" />
+                 </div>
+                 <div>
+                    <h3 className="text-base sm:text-lg font-black tracking-tight flex items-center gap-2">
+                       <span>🚨 رسالة طارئة وعاجلة: يوجد ({delayedRequestsList.length}) معاملة متأخرة عن يومين عمل!</span>
+                    </h3>
+                    <p className="text-xs sm:text-sm font-bold opacity-90 mt-0.5">
+                       تجاوزت هذه المعاملات مهلة التسكين المحددة (2 يوم عمل). يلزم متابعتها فوراً والتواصل مع مدير المدرسة والقيادة المدرسية لإنهاء التسكين.
+                    </p>
+                 </div>
+              </div>
+              <button
+                 onClick={() => {
+                    setActiveFeature('leadership');
+                    setPlacementsSubTab('leadership');
+                 }}
+                 className="px-5 py-2.5 bg-white text-rose-900 hover:bg-rose-50 rounded-2xl text-xs font-black transition-all cursor-pointer shadow-md shrink-0 flex items-center gap-2"
+              >
+                 <span>الانتقال لمتابعة التسكين والمعاملات المتأخرة</span>
+                 <ArrowRight className="w-4 h-4 rotate-180" />
+              </button>
+           </div>
+        )}
+
         {/* 4. KPI SUMMARY CARDS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
            {[
@@ -1403,9 +1481,9 @@ export default function Dashboard({
                        <Send className={`w-10 h-10 ${activeFeature === 'requests' ? 'text-white' : 'text-teal-600'}`} />
                     </div>
                     <div className="text-center">
-                       <h3 className="text-xl font-black uppercase tracking-tight">طلبات القبول والتسجيل والنقل</h3>
-                       <div className="text-[11px] font-bold opacity-80 mt-1">مشرف القبول والتسجيل</div>
-                       <div className={`mt-2 px-3 py-1 rounded-full text-[10px] font-black border ${activeFeature === 'requests' ? 'bg-white/20 border-white/30' : 'bg-teal-50 border-teal-100 text-teal-600'}`}>
+                       <h3 className="text-xl sm:text-2xl font-black uppercase tracking-tight">طلبات القبول والتسجيل والنقل</h3>
+                       <div className="text-xs sm:text-sm font-black opacity-90 mt-1">مشرف القبول والتسجيل</div>
+                       <div className={`mt-3 px-4 py-1.5 rounded-full text-xs sm:text-sm font-black border tracking-wide shadow-xs ${activeFeature === 'requests' ? 'bg-white/20 border-white/30' : 'bg-teal-100 text-teal-950 border-teal-300 dark:bg-teal-950 dark:text-teal-200'}`}>
                           ({stats.admissionCount}) معاملة (جديد + نقل)
                        </div>
                     </div>
@@ -1422,13 +1500,13 @@ export default function Dashboard({
                 onClick={() => setActiveFeature('equivalency_requests')}
                 className={`p-6 text-right rounded-[32px] border transition-all cursor-pointer flex items-center gap-4 group ${activeFeature === 'equivalency_requests' ? 'bg-indigo-700 text-white border-indigo-700 ring-4 ring-indigo-500/20' : 'bg-white dark:bg-[#081e2b] text-slate-800 dark:text-white border-slate-100 dark:border-teal-800/20 hover:border-indigo-500'}`}
               >
-                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${activeFeature === 'equivalency_requests' ? 'bg-white/20 text-white' : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600'}`}>
+                 <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center ${activeFeature === 'equivalency_requests' ? 'bg-white/20 text-white' : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600'}`}>
                     <GraduationCap className="w-7 h-7" />
                  </div>
                  <div className="flex-1">
-                    <div className="text-[11px] font-black">طلبات معادلة المؤهلات والشهادات</div>
-                    <div className="text-[9px] font-bold text-slate-400 mt-0.5">مشرف معادلة الشهادات</div>
-                    <div className={`mt-1 px-2 py-0.5 rounded-md text-[9px] font-bold inline-block ${activeFeature === 'equivalency_requests' ? 'bg-white/20 text-white' : 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600'}`}>
+                    <div className="text-sm sm:text-base font-black leading-snug">طلبات معادلة المؤهلات والشهادات</div>
+                    <div className="text-xs font-black text-slate-500 dark:text-slate-300 mt-0.5">مشرف معادلة الشهادات</div>
+                    <div className={`mt-2 px-3 py-1 rounded-xl text-xs sm:text-sm font-black border tracking-wide inline-flex items-center gap-1 shadow-xs ${activeFeature === 'equivalency_requests' ? 'bg-white/25 text-white border-white/30' : 'bg-indigo-100 text-indigo-950 border-indigo-300 dark:bg-indigo-950 dark:text-indigo-200 dark:border-indigo-700'}`}>
                        ({stats.equivalencyCount}) طلب معادلة
                     </div>
                  </div>
@@ -1441,12 +1519,12 @@ export default function Dashboard({
                 onClick={() => setActiveFeature('principal_reports')}
                 className={`p-6 text-right rounded-[32px] border transition-all cursor-pointer flex items-center gap-4 group ${activeFeature === 'principal_reports' ? 'bg-emerald-600 text-white border-emerald-600 ring-4 ring-emerald-500/20' : 'bg-white dark:bg-[#081e2b] text-slate-800 dark:text-white border-slate-100 dark:border-teal-800/20 hover:border-emerald-500'}`}
               >
-                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${activeFeature === 'principal_reports' ? 'bg-white/20 text-white' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600'}`}>
+                 <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center ${activeFeature === 'principal_reports' ? 'bg-white/20 text-white' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600'}`}>
                     <CheckCircle className="w-7 h-7" />
                  </div>
                  <div className="flex-1">
-                    <div className="text-[11px] font-black">متابعة ومعالجة بلاغات المدارس</div>
-                    <div className={`mt-1 px-2 py-0.5 rounded-md text-[9px] font-bold inline-block ${activeFeature === 'principal_reports' ? 'bg-white/20 text-white' : 'bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600'}`}>
+                    <div className="text-sm sm:text-base font-black leading-snug">متابعة ومعالجة بلاغات المدارس</div>
+                    <div className={`mt-2 px-3 py-1 rounded-xl text-xs sm:text-sm font-black border tracking-wide inline-flex items-center gap-1 shadow-xs ${activeFeature === 'principal_reports' ? 'bg-white/25 text-white border-white/30' : 'bg-emerald-100 text-emerald-950 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-200 dark:border-emerald-700'}`}>
                        مكتمل ({stats.reportsCount}) ✓
                     </div>
                  </div>
@@ -1459,12 +1537,12 @@ export default function Dashboard({
                 onClick={() => setActiveFeature('sync')}
                 className={`p-6 text-right rounded-[32px] border transition-all cursor-pointer flex items-center gap-4 group ${activeFeature === 'sync' ? 'bg-blue-600 text-white border-blue-600 ring-4 ring-blue-500/20' : 'bg-white dark:bg-[#081e2b] text-slate-800 dark:text-white border-slate-100 dark:border-teal-800/20 hover:border-blue-500'}`}
               >
-                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${activeFeature === 'sync' ? 'bg-white/20 text-white' : 'bg-blue-50 dark:bg-blue-950/40 text-blue-600'}`}>
+                 <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center ${activeFeature === 'sync' ? 'bg-white/20 text-white' : 'bg-blue-50 dark:bg-blue-950/40 text-blue-600'}`}>
                     <RefreshCw className={`w-7 h-7 ${unsyncedCount > 0 ? 'animate-spin' : ''}`} />
                  </div>
                  <div className="flex-1">
-                    <div className="text-[11px] font-black">المزامنة والربط الإلكتروني</div>
-                    <div className={`mt-1 px-2 py-0.5 rounded-md text-[9px] font-bold inline-block ${activeFeature === 'sync' ? 'bg-white/20 text-white' : 'bg-blue-50 dark:bg-blue-900/40 text-blue-600'}`}>
+                    <div className="text-sm sm:text-base font-black leading-snug">المزامنة والربط الإلكتروني</div>
+                    <div className={`mt-2 px-3 py-1 rounded-xl text-xs sm:text-sm font-black border tracking-wide inline-flex items-center gap-1 shadow-xs ${activeFeature === 'sync' ? 'bg-white/25 text-white border-white/30' : 'bg-blue-100 text-blue-950 border-blue-300 dark:bg-blue-950 dark:text-blue-200 dark:border-blue-700'}`}>
                        {unsyncedCount > 0 ? `${unsyncedCount} غير متزامن` : 'متزامن بالكامل ✓'}
                     </div>
                  </div>
@@ -1477,12 +1555,12 @@ export default function Dashboard({
                 onClick={() => setActiveFeature('settings')}
                 className={`p-6 text-right rounded-[32px] border transition-all cursor-pointer flex items-center gap-4 group ${activeFeature === 'settings' ? 'bg-slate-800 text-white border-slate-800 ring-4 ring-slate-500/20' : 'bg-white dark:bg-[#081e2b] text-slate-800 dark:text-white border-slate-100 dark:border-teal-800/20 hover:border-slate-500'}`}
               >
-                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${activeFeature === 'settings' ? 'bg-white/20 text-white' : 'bg-slate-50 dark:bg-slate-900 text-slate-600'}`}>
+                 <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center ${activeFeature === 'settings' ? 'bg-white/20 text-white' : 'bg-slate-50 dark:bg-slate-900 text-slate-600'}`}>
                     <Settings className="w-7 h-7" />
                  </div>
                  <div className="flex-1">
-                    <div className="text-[11px] font-black">لوحة الإعدادات الشاملة</div>
-                    <div className={`mt-1 px-2 py-0.5 rounded-md text-[9px] font-bold inline-block ${activeFeature === 'settings' ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+                    <div className="text-sm sm:text-base font-black leading-snug">لوحة الإعدادات الشاملة</div>
+                    <div className={`mt-2 px-3 py-1 rounded-xl text-xs sm:text-sm font-black border tracking-wide inline-flex items-center gap-1 shadow-xs ${activeFeature === 'settings' ? 'bg-white/25 text-white border-white/30' : 'bg-slate-200 text-slate-900 border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700'}`}>
                        النظام والتكوين
                     </div>
                  </div>
@@ -1495,12 +1573,12 @@ export default function Dashboard({
                 onClick={() => setActiveFeature('placements')}
                 className={`p-6 text-right rounded-[32px] border transition-all cursor-pointer flex items-center gap-4 group ${activeFeature === 'placements' ? 'bg-teal-700 text-white border-teal-700 ring-4 ring-teal-500/20' : 'bg-white dark:bg-[#081e2b] text-slate-800 dark:text-white border-slate-100 dark:border-teal-800/20 hover:border-teal-500'}`}
               >
-                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${activeFeature === 'placements' ? 'bg-white/20 text-white' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600'}`}>
+                 <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center ${activeFeature === 'placements' ? 'bg-white/20 text-white' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600'}`}>
                     <Building2 className="w-7 h-7" />
                  </div>
                  <div className="flex-1">
-                    <div className="text-[11px] font-black">طلبات التسكين والمتابعة بالمدارس</div>
-                    <div className={`mt-1 px-2 py-0.5 rounded-md text-[9px] font-bold inline-block ${activeFeature === 'placements' ? 'bg-white/20 text-white' : 'bg-teal-50 dark:bg-teal-900/40 text-teal-600'}`}>
+                    <div className="text-sm sm:text-base font-black leading-snug">طلبات التسكين والمتابعة بالمدارس</div>
+                    <div className={`mt-2 px-3 py-1 rounded-xl text-xs sm:text-sm font-black border tracking-wide inline-flex items-center gap-1 shadow-xs ${activeFeature === 'placements' ? 'bg-white/25 text-white border-white/30' : 'bg-teal-100 text-teal-950 border-teal-300 dark:bg-teal-950 dark:text-teal-200 dark:border-teal-700'}`}>
                        متابعة وتدقيق التسكين
                     </div>
                  </div>
@@ -1513,12 +1591,12 @@ export default function Dashboard({
                 onClick={() => setActiveFeature('staff')}
                 className={`p-6 text-right rounded-[32px] border transition-all cursor-pointer flex items-center gap-4 group ${activeFeature === 'staff' ? 'bg-indigo-600 text-white border-indigo-600 ring-4 ring-indigo-500/20' : 'bg-white dark:bg-[#081e2b] text-slate-800 dark:text-white border-slate-100 dark:border-teal-800/20 hover:border-indigo-500'}`}
               >
-                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${activeFeature === 'staff' ? 'bg-white/20 text-white' : 'bg-blue-50 dark:bg-blue-950/40 text-blue-600'}`}>
+                 <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center ${activeFeature === 'staff' ? 'bg-white/20 text-white' : 'bg-blue-50 dark:bg-blue-950/40 text-blue-600'}`}>
                     <Users className="w-7 h-7" />
                  </div>
                  <div className="flex-1">
-                    <div className="text-[11px] font-black">منسوبي الإدارة والكوادر والصلاحيات</div>
-                    <div className={`mt-1 px-2 py-0.5 rounded-md text-[9px] font-bold inline-block ${activeFeature === 'staff' ? 'bg-white/20 text-white' : 'bg-blue-50 dark:bg-blue-900/40 text-blue-600'}`}>
+                    <div className="text-sm sm:text-base font-black leading-snug">منسوبي الإدارة والكوادر والصلاحيات</div>
+                    <div className={`mt-2 px-3 py-1 rounded-xl text-xs sm:text-sm font-black border tracking-wide inline-flex items-center gap-1 shadow-xs ${activeFeature === 'staff' ? 'bg-white/25 text-white border-white/30' : 'bg-indigo-100 text-indigo-950 border-indigo-300 dark:bg-indigo-950 dark:text-indigo-200 dark:border-indigo-700'}`}>
                        {DEMO_OFFICERS.length} موظفين
                     </div>
                  </div>
@@ -1531,12 +1609,12 @@ export default function Dashboard({
                 onClick={() => setActiveFeature('feedback')}
                 className={`p-6 text-right rounded-[32px] border transition-all cursor-pointer flex items-center gap-4 group ${activeFeature === 'feedback' ? 'bg-teal-600 text-white border-teal-600 ring-4 ring-teal-500/20' : 'bg-white dark:bg-[#081e2b] text-slate-800 dark:text-white border-slate-100 dark:border-teal-800/20 hover:border-teal-500'}`}
               >
-                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${activeFeature === 'feedback' ? 'bg-white/20 text-white' : 'bg-teal-50 dark:bg-teal-900/40 text-teal-600'}`}>
+                 <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center ${activeFeature === 'feedback' ? 'bg-white/20 text-white' : 'bg-teal-50 dark:bg-teal-900/40 text-teal-600'}`}>
                     <MessageSquare className="w-7 h-7" />
                  </div>
                  <div className="flex-1">
-                    <div className="text-[11px] font-black">ملاحظات ورسائل المستفيدين</div>
-                    <div className={`mt-1 px-2 py-0.5 rounded-md text-[9px] font-bold inline-block ${activeFeature === 'feedback' ? 'bg-white/20 text-white' : 'bg-teal-50 dark:bg-teal-900/40 text-teal-600'}`}>
+                    <div className="text-sm sm:text-base font-black leading-snug">ملاحظات ورسائل المستفيدين</div>
+                    <div className={`mt-2 px-3 py-1 rounded-xl text-xs sm:text-sm font-black border tracking-wide inline-flex items-center gap-1 shadow-xs ${activeFeature === 'feedback' ? 'bg-white/25 text-white border-white/30' : 'bg-teal-100 text-teal-950 border-teal-300 dark:bg-teal-950 dark:text-teal-200 dark:border-teal-700'}`}>
                        {stats.feedbacksCount} رسائل
                     </div>
                  </div>
@@ -1549,12 +1627,12 @@ export default function Dashboard({
                 onClick={() => setActiveFeature('analytics')}
                 className={`p-6 text-right rounded-[32px] border transition-all cursor-pointer flex items-center gap-4 group ${activeFeature === 'analytics' ? 'bg-purple-600 text-white border-purple-600 ring-4 ring-purple-500/20' : 'bg-white dark:bg-[#081e2b] text-slate-800 dark:text-white border-slate-100 dark:border-teal-800/20 hover:border-purple-500'}`}
               >
-                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${activeFeature === 'analytics' ? 'bg-white/20 text-white' : 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600'}`}>
+                 <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center ${activeFeature === 'analytics' ? 'bg-white/20 text-white' : 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600'}`}>
                     <BarChart3 className="w-7 h-7" />
                  </div>
                  <div className="flex-1">
-                    <div className="text-[11px] font-black">التحليلات والرسوم البيانية</div>
-                    <div className={`mt-1 px-2 py-0.5 rounded-md text-[9px] font-bold inline-block ${activeFeature === 'analytics' ? 'bg-white/20 text-white' : 'bg-purple-50 dark:bg-purple-900/40 text-purple-600'}`}>
+                    <div className="text-sm sm:text-base font-black leading-snug">التحليلات والرسوم البيانية</div>
+                    <div className={`mt-2 px-3 py-1 rounded-xl text-xs sm:text-sm font-black border tracking-wide inline-flex items-center gap-1 shadow-xs ${activeFeature === 'analytics' ? 'bg-white/25 text-white border-white/30' : 'bg-purple-100 text-purple-950 border-purple-300 dark:bg-purple-950 dark:text-purple-200 dark:border-purple-700'}`}>
                        مخططات تفاعلية
                     </div>
                  </div>
@@ -1567,12 +1645,12 @@ export default function Dashboard({
                 onClick={() => setActiveFeature('alerts')}
                 className={`p-6 text-right rounded-[32px] border transition-all cursor-pointer flex items-center gap-4 group ${activeFeature === 'alerts' ? 'bg-rose-600 text-white border-rose-600 ring-4 ring-rose-500/20' : 'bg-white dark:bg-[#081e2b] text-slate-800 dark:text-white border-slate-100 dark:border-teal-800/20 hover:border-rose-500'}`}
               >
-                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${activeFeature === 'alerts' ? 'bg-white/20 text-white' : 'bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600'}`}>
+                 <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center ${activeFeature === 'alerts' ? 'bg-white/20 text-white' : 'bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600'}`}>
                     <Mail className="w-7 h-7" />
                  </div>
                  <div className="flex-1">
-                    <div className="text-[11px] font-black">سجل التنبيهات الفورية</div>
-                    <div className={`mt-1 px-2 py-0.5 rounded-md text-[9px] font-bold inline-block ${activeFeature === 'alerts' ? 'bg-white/20 text-white' : 'bg-rose-50 dark:bg-rose-900/40 text-rose-600'}`}>
+                    <div className="text-sm sm:text-base font-black leading-snug">سجل التنبيهات الفورية</div>
+                    <div className={`mt-2 px-3 py-1 rounded-xl text-xs sm:text-sm font-black border tracking-wide inline-flex items-center gap-1 shadow-xs ${activeFeature === 'alerts' ? 'bg-white/25 text-white border-white/30' : 'bg-rose-100 text-rose-950 border-rose-300 dark:bg-rose-950 dark:text-rose-200 dark:border-rose-700'}`}>
                        {stats.emailLogsCount} إشعار
                     </div>
                  </div>
@@ -1585,12 +1663,12 @@ export default function Dashboard({
                 onClick={() => setActiveFeature('schools')}
                 className={`p-6 text-right rounded-[32px] border transition-all cursor-pointer flex items-center gap-4 group ${activeFeature === 'schools' ? 'bg-teal-600 text-white border-teal-600 ring-4 ring-teal-500/20' : 'bg-white dark:bg-[#081e2b] text-slate-800 dark:text-white border-slate-100 dark:border-teal-800/20 hover:border-teal-500'}`}
               >
-                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${activeFeature === 'schools' ? 'bg-white/20 text-white' : 'bg-teal-50 dark:bg-teal-900/40 text-teal-600'}`}>
+                 <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center ${activeFeature === 'schools' ? 'bg-white/20 text-white' : 'bg-teal-50 dark:bg-teal-900/40 text-teal-600'}`}>
                     <School className="w-7 h-7" />
                  </div>
                  <div className="flex-1">
-                    <div className="text-[11px] font-black">دليل المدارس والأرقام الوزارية</div>
-                    <div className={`mt-1 px-2 py-0.5 rounded-md text-[9px] font-bold inline-block ${activeFeature === 'schools' ? 'bg-white/20 text-white' : 'bg-teal-50 dark:bg-teal-900/40 text-teal-600'}`}>
+                    <div className="text-sm sm:text-base font-black leading-snug">دليل المدارس والأرقام الوزارية</div>
+                    <div className={`mt-2 px-3 py-1 rounded-xl text-xs sm:text-sm font-black border tracking-wide inline-flex items-center gap-1 shadow-xs ${activeFeature === 'schools' ? 'bg-white/25 text-white border-white/30' : 'bg-teal-100 text-teal-950 border-teal-300 dark:bg-teal-950 dark:text-teal-200 dark:border-teal-700'}`}>
                        {stats.schoolsCount > 0 ? stats.schoolsCount : '2940'} مدرسة
                     </div>
                  </div>
@@ -1603,12 +1681,12 @@ export default function Dashboard({
                 onClick={() => setActiveFeature('satisfaction')}
                 className={`p-6 text-right rounded-[32px] border transition-all cursor-pointer flex items-center gap-4 group ${activeFeature === 'satisfaction' ? 'bg-amber-600 text-white border-amber-600 ring-4 ring-amber-500/20' : 'bg-white dark:bg-[#081e2b] text-slate-800 dark:text-white border-slate-100 dark:border-teal-800/20 hover:border-amber-500'}`}
               >
-                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${activeFeature === 'satisfaction' ? 'bg-white/20 text-white' : 'bg-amber-50 dark:bg-amber-900/40 text-amber-600'}`}>
+                 <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center ${activeFeature === 'satisfaction' ? 'bg-white/20 text-white' : 'bg-amber-50 dark:bg-amber-900/40 text-amber-600'}`}>
                     <Star className="w-7 h-7" />
                  </div>
                  <div className="flex-1">
-                    <div className="text-[11px] font-black">قياس رضا المستفيدين</div>
-                    <div className={`mt-1 px-2 py-0.5 rounded-md text-[9px] font-bold inline-block ${activeFeature === 'satisfaction' ? 'bg-white/20 text-white' : 'bg-amber-50 dark:bg-amber-900/40 text-amber-600'}`}>
+                    <div className="text-sm sm:text-base font-black leading-snug">قياس رضا المستفيدين</div>
+                    <div className={`mt-2 px-3 py-1 rounded-xl text-xs sm:text-sm font-black border tracking-wide inline-flex items-center gap-1 shadow-xs ${activeFeature === 'satisfaction' ? 'bg-white/25 text-white border-white/30' : 'bg-amber-100 text-amber-950 border-amber-300 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-700'}`}>
                        مؤشرات الرضا ⭐ ({stats.avgSat})
                     </div>
                  </div>
@@ -1621,12 +1699,12 @@ export default function Dashboard({
                 onClick={() => setActiveFeature('reports')}
                 className={`p-6 text-right rounded-[32px] border transition-all cursor-pointer flex items-center gap-4 group ${activeFeature === 'reports' ? 'bg-blue-700 text-white border-blue-700 ring-4 ring-blue-500/20' : 'bg-white dark:bg-[#081e2b] text-slate-800 dark:text-white border-slate-100 dark:border-teal-800/20 hover:border-blue-500'}`}
               >
-                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${activeFeature === 'reports' ? 'bg-white/20 text-white' : 'bg-slate-50 dark:bg-slate-900 text-slate-600'}`}>
+                 <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center ${activeFeature === 'reports' ? 'bg-white/20 text-white' : 'bg-slate-50 dark:bg-slate-900 text-slate-600'}`}>
                     <FileText className="w-7 h-7" />
                  </div>
                  <div className="flex-1">
-                    <div className="text-[11px] font-black">التقارير المتقدمة</div>
-                    <div className={`mt-1 px-2 py-0.5 rounded-md text-[9px] font-bold inline-block ${activeFeature === 'reports' ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+                    <div className="text-sm sm:text-base font-black leading-snug">التقارير المتقدمة</div>
+                    <div className={`mt-2 px-3 py-1 rounded-xl text-xs sm:text-sm font-black border tracking-wide inline-flex items-center gap-1 shadow-xs ${activeFeature === 'reports' ? 'bg-white/25 text-white border-white/30' : 'bg-blue-100 text-blue-950 border-blue-300 dark:bg-blue-950 dark:text-blue-200 dark:border-blue-700'}`}>
                        جديد ومطور
                     </div>
                  </div>
@@ -1639,12 +1717,12 @@ export default function Dashboard({
                 onClick={() => setActiveFeature('principal_data')}
                 className={`p-6 text-right rounded-[32px] border transition-all cursor-pointer flex items-center gap-4 group ${activeFeature === 'principal_data' ? 'bg-emerald-700 text-white border-emerald-700 ring-4 ring-emerald-500/20' : 'bg-white dark:bg-[#081e2b] text-slate-800 dark:text-white border-slate-100 dark:border-teal-800/20 hover:border-emerald-500'}`}
               >
-                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${activeFeature === 'principal_data' ? 'bg-white/20 text-white' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600'}`}>
+                 <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center ${activeFeature === 'principal_data' ? 'bg-white/20 text-white' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600'}`}>
                     <Users className="w-7 h-7" />
                  </div>
                  <div className="flex-1">
-                    <div className="text-[11px] font-black">بيانات مديري المدارس</div>
-                    <div className={`mt-1 px-2 py-0.5 rounded-md text-[9px] font-bold inline-block ${activeFeature === 'principal_data' ? 'bg-white/20 text-white' : 'bg-emerald-50 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'}`}>
+                    <div className="text-sm sm:text-base font-black leading-snug">بيانات مديري المدارس</div>
+                    <div className={`mt-2 px-3 py-1 rounded-xl text-xs sm:text-sm font-black border tracking-wide inline-flex items-center gap-1 shadow-xs ${activeFeature === 'principal_data' ? 'bg-white/25 text-white border-white/30' : 'bg-emerald-100 text-emerald-950 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-200 dark:border-emerald-700'}`}>
                        رفع وربط Excel 📊
                     </div>
                  </div>
@@ -1730,16 +1808,17 @@ export default function Dashboard({
                   {[
                     { id: 'new', label: 'وارد جديد (غير مستلم)', count: workflowCounts.new, icon: Inbox },
                     { id: 'my', label: 'معاملاتي المستلمة', count: workflowCounts.my, icon: UserCheck },
+                    { id: 'sent_to_school', label: 'المعاملات المرسلة للمدرسة بعد فتح الشاغر', count: workflowCounts.sentToSchool, icon: Building2 },
                     { id: 'archive', label: 'الأرشيف والمنجز', count: workflowCounts.archive, icon: Database }
                   ].map((btn) => (
                     <button
                       key={btn.id}
                       onClick={() => setWorkflowStatus(btn.id)}
-                      className={"px-4 py-2.5 rounded-xl text-[11px] font-black flex items-center gap-2 transition-all cursor-pointer " + (workflowStatus === btn.id ? 'bg-[#009688] text-white shadow-md scale-102' : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800')}
+                      className={"px-4 py-3 rounded-2xl text-xs sm:text-sm font-black flex items-center gap-2.5 transition-all cursor-pointer border " + (workflowStatus === btn.id ? 'bg-[#009688] text-white shadow-md border-teal-700 scale-102 ring-2 ring-teal-500/20' : 'bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-teal-800/40 hover:bg-slate-200 dark:hover:bg-slate-800')}
                     >
-                       <btn.icon className="w-3.5 h-3.5" />
-                       <span>{btn.label}</span>
-                       <span className={"px-2 py-0.5 rounded-md text-[9px] font-bold " + (workflowStatus === btn.id ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300')}>
+                       <btn.icon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                       <span className="leading-snug">{btn.label}</span>
+                       <span className={"px-2.5 py-0.5 rounded-lg text-xs sm:text-sm font-black font-mono border shadow-2xs " + (workflowStatus === btn.id ? 'bg-white/25 text-white border-white/30' : 'bg-slate-200 text-slate-950 border-slate-300 dark:bg-slate-800 dark:text-white dark:border-slate-700')}>
                           {btn.count}
                        </span>
                     </button>
@@ -1930,7 +2009,8 @@ export default function Dashboard({
                                                             ...s, 
                                                             isVacancyRequest: true,
                                                             vacancyRequestStatus: 'pending',
-                                                            referredToPlanningAt: new Date().toISOString()
+                                                            referredToPlanningAt: new Date().toISOString(),
+                                                            eqReferredToPlanningAt: new Date().toISOString()
                                                          };
                                                          onUpdateSurvey(updated);
                                                          setClaimToastMessage("تمت إحالة الطلب بنجاح لمشرف التخطيط لفتح الشواغر والميزانيات 🔓");
@@ -2183,11 +2263,11 @@ export default function Dashboard({
                      <button
                        key={btn.id}
                        onClick={() => setEqWorkflowStatus(btn.id)}
-                       className={"px-4 py-2.5 rounded-xl text-[11px] font-black flex items-center gap-2 transition-all cursor-pointer " + (eqWorkflowStatus === btn.id ? 'bg-indigo-600 text-white shadow-md scale-102' : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800')}
+                       className={"px-4 py-3 rounded-2xl text-xs sm:text-sm font-black flex items-center gap-2.5 transition-all cursor-pointer border " + (eqWorkflowStatus === btn.id ? 'bg-indigo-600 text-white shadow-md border-indigo-700 scale-102 ring-2 ring-indigo-500/20' : 'bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-teal-800/40 hover:bg-slate-200 dark:hover:bg-slate-800')}
                      >
-                        <btn.icon className="w-3.5 h-3.5" />
-                        <span>{btn.label}</span>
-                        <span className={"px-2 py-0.5 rounded-md text-[9px] font-bold " + (eqWorkflowStatus === btn.id ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300')}>
+                        <btn.icon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                        <span className="leading-snug">{btn.label}</span>
+                        <span className={"px-2.5 py-0.5 rounded-lg text-xs sm:text-sm font-black font-mono border shadow-2xs " + (eqWorkflowStatus === btn.id ? 'bg-white/25 text-white border-white/30' : 'bg-slate-200 text-slate-950 border-slate-300 dark:bg-slate-800 dark:text-white dark:border-slate-700')}>
                            {btn.count}
                         </span>
                      </button>
@@ -2395,20 +2475,25 @@ export default function Dashboard({
                                             <div className="text-[9px] font-bold text-slate-500 text-right">3. أيقونة رفع المعادلة من الجهاز:</div>
                                               <label className="w-full py-2 px-3 rounded-xl bg-[#0284c7] hover:bg-[#0369a1] text-white font-black text-[10px] flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-all active:scale-95">
                                                  <Upload className="w-3.5 h-3.5" />
-                                                 <span>3. رفع المعادلة من الجهاز</span>
+                                                 <span>3. رفع ملفات المعادلة من الجهاز (إمكانية رفع أكثر من 3 ملفات)</span>
                                                  <input 
                                                     type="file" 
                                                     className="hidden" 
                                                     onChange={(e) => handleFileUpload(s, e)}
-                                                    accept=".pdf,.jpg,.jpeg,.png"
+                                                    multiple
+                                                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                                                  />
                                               </label>
                                               {s.attachments && s.attachments.length > 0 && (
                                                  <div className="flex flex-wrap justify-end gap-1 mt-1">
                                                     {s.attachments.map((att, idx) => (
                                                        <span key={idx} className="px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-purple-200 text-[8px] font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1">
-                                                          <Check className="w-2.5 h-2.5 text-emerald-600" />
-                                                          تم الرفع ✓
+                                                          <FileText className="w-3 h-3 text-purple-600 shrink-0" />
+                                                          <span className="truncate max-w-[120px]">{att.name}</span>
+                                                          {att.data && (
+                                                             <a href={att.data} download={att.name} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 underline text-[8.5px] font-bold">معاينة</a>
+                                                          )}
+                                                          <button type="button" onClick={() => handleDeleteAttachment(s, idx)} className="text-rose-500 hover:text-rose-700 font-black cursor-pointer px-1">✕</button>
                                                        </span>
                                                     ))}
                                                  </div>
@@ -2429,7 +2514,8 @@ export default function Dashboard({
                                                              ...s, 
                                                              isVacancyRequest: true,
                                                              vacancyRequestStatus: 'pending',
-                                                             referredToPlanningAt: new Date().toISOString()
+                                                             referredToPlanningAt: new Date().toISOString(),
+                                                             eqReferredToPlanningAt: new Date().toISOString()
                                                           };
                                                           onUpdateSurvey(updated);
                                                           setClaimToastMessage("تمت إحالة الطلب بنجاح إلى مشرف التخطيط لفتح الشاغر 🔓");
@@ -2969,6 +3055,8 @@ export default function Dashboard({
                                                   vacancyRequestStatus: 'vacancy_opened',
                                                   sentToSchoolPrincipal: true,
                                                   sentToPrincipalAt: new Date().toISOString(),
+                                                  vacancyApprovedAt: new Date().toISOString(),
+                                                  ...(s.returnedByPrincipal ? { planningReResolvedAt: new Date().toISOString() } : {}),
                                                   isVacancyRequest: false,
                                                   returnedByPrincipal: false,
                                                   vacancyRequestNotes: `تم اعتماد فتح شاغر وتوطين الطالب في المدرسة: ${finalSchool} بواسطة التخطيط (${activeOfficer.nameAr}) بتاريخ ${new Date().toLocaleDateString('ar-SA')}`
@@ -3165,6 +3253,11 @@ export default function Dashboard({
                                                {diffHours} ساعة {diffDays > 0 ? `(${diffDays} يوم)` : ''}
                                             </strong>
                                          </div>
+                                      </div>
+
+                                      {/* Full 7-Step Dispatch & LifeCycle Timeline */}
+                                      <div className="pt-2">
+                                         <RequestDispatchTimeline survey={s} />
                                       </div>
 
                                       {/* Show Follow up logs if any */}

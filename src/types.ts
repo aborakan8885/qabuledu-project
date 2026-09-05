@@ -76,6 +76,8 @@ export interface SurveyResponse {
   isVacancyRequest?: boolean;
   vacancyRequestStatus?: string;
   referredToPlanningAt?: string;
+  eqReferredToPlanningAt?: string;
+  vacancyApprovedAt?: string;
   submittedAt?: string;
   sentToSchoolPrincipal?: boolean;
   sentToPlanningOfficer?: boolean;
@@ -92,6 +94,9 @@ export interface SurveyResponse {
   returnedByPrincipal?: boolean;
   principalReturnReason?: string;
   returnedAt?: string;
+  principalReturnedAt?: string;
+  planningReResolvedAt?: string;
+  finalStaffingConfirmedAt?: string;
   principalReturnCount?: number;
   isSecondReturnByPrincipal?: boolean;
 

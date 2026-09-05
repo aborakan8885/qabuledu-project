@@ -44,12 +44,17 @@ export default function BeneficiarySatisfactionView({
 }: BeneficiarySatisfactionViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [genderFilter, setGenderFilter] = useState<'all' | 'boys' | 'girls'>('all');
-  const [ratingFilter, setRatingFilter] = useState<'all' | '5' | '4' | '3' | '1-2' | 'unrated'>('all');
+  const [ratingFilter, setRatingFilter] = useState<'all' | 'rated' | '5' | '4' | '3' | '1-2' | 'unrated'>('all');
   const [stageFilter, setStageFilter] = useState<string>('all');
   const [onlyWithNotes, setOnlyWithNotes] = useState<boolean>(false);
   const [selectedSurveyNote, setSelectedSurveyNote] = useState<SurveyResponse | null>(null);
   const [showOfficialModal, setShowOfficialModal] = useState<boolean>(false);
   const [officialReportData, setOfficialReportData] = useState<ReportExportData | null>(null);
+
+  // Helper rating extraction
+  const getStaffVal = (s: SurveyResponse) => Number(s.staffSatisfaction) || Number(s.satisfaction) || 0;
+  const getRecepVal = (s: SurveyResponse) => Number(s.receptionSatisfaction) || Number(s.satisfaction) || 0;
+  const isSurveyRated = (s: SurveyResponse) => getStaffVal(s) > 0 || getRecepVal(s) > 0 || Boolean(s.beneficiaryEvaluationSubmitted);
 
   // Helper translations
   const getProblemName = (problemType: ProblemType | string): string => {
@@ -149,9 +154,9 @@ export default function BeneficiarySatisfactionView({
     let starLowCount = 0;
 
     surveys.forEach(s => {
-      const staffVal = Number(s.staffSatisfaction) || 0;
-      const recepVal = Number(s.receptionSatisfaction) || 0;
-      const isRated = staffVal > 0 || recepVal > 0;
+      const staffVal = getStaffVal(s);
+      const recepVal = getRecepVal(s);
+      const isRated = isSurveyRated(s);
       const cleanNote = getCleanBeneficiaryNotes(s.notes);
       if (cleanNote) withNotesCount++;
 
@@ -163,8 +168,8 @@ export default function BeneficiarySatisfactionView({
 
       if (isRated) {
         ratedCount++;
-        const sVal = staffVal || 5;
-        const rVal = recepVal || 5;
+        const sVal = staffVal || (recepVal || 5);
+        const rVal = recepVal || (staffVal || 5);
         totalStaff += sVal;
         totalReception += rVal;
 
@@ -245,11 +250,14 @@ export default function BeneficiarySatisfactionView({
       }
 
       // 3. Rating Filter
-      const staffVal = Number(s.staffSatisfaction) || 0;
-      const recepVal = Number(s.receptionSatisfaction) || 0;
-      const isRated = staffVal > 0 || recepVal > 0;
-      const avgItem = isRated ? ((staffVal || 5) + (recepVal || 5)) / 2 : 0;
+      const staffVal = getStaffVal(s);
+      const recepVal = getRecepVal(s);
+      const isRated = isSurveyRated(s);
+      const sVal = staffVal || (recepVal || 5);
+      const rVal = recepVal || (staffVal || 5);
+      const avgItem = isRated ? (sVal + rVal) / 2 : 0;
 
+      if (ratingFilter === 'rated' && !isRated) return false;
       if (ratingFilter === 'unrated' && isRated) return false;
       if (ratingFilter === '5' && avgItem < 4.5) return false;
       if (ratingFilter === '4' && (avgItem < 3.5 || avgItem >= 4.5)) return false;
@@ -268,6 +276,14 @@ export default function BeneficiarySatisfactionView({
       }
 
       return true;
+    }).sort((a, b) => {
+      const aRated = isSurveyRated(a);
+      const bRated = isSurveyRated(b);
+      if (aRated && !bRated) return -1;
+      if (!aRated && bRated) return 1;
+      const aTime = new Date(a.evaluationSubmittedAt || a.lastUpdatedAt || a.createdAt).getTime();
+      const bTime = new Date(b.evaluationSubmittedAt || b.lastUpdatedAt || b.createdAt).getTime();
+      return bTime - aTime;
     });
   }, [surveys, searchQuery, genderFilter, ratingFilter, stageFilter, onlyWithNotes]);
 
@@ -794,12 +810,13 @@ export default function BeneficiarySatisfactionView({
               onChange={(e) => setRatingFilter(e.target.value as any)}
               className="p-1.5 border rounded-xl font-bold bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
             >
-              <option value="all">كل التقييمات</option>
+              <option value="all">كل السجلات ({surveys.length})</option>
+              <option value="rated">🌟 المقيّمين والمقيمين حديثاً ({stats.ratedCount})</option>
               <option value="5">⭐⭐⭐⭐⭐ ممتاز (5 نجوم)</option>
               <option value="4">⭐⭐⭐⭐ جيد جداً (4 نجوم)</option>
               <option value="3">⭐⭐⭐ جيد (3 نجوم)</option>
               <option value="1-2">⚠️ بحاجة لتحسين (1-2)</option>
-              <option value="unrated">لم يتم التقييم بعد</option>
+              <option value="unrated">لم يتم التقييم بعد ({stats.unratedCount})</option>
             </select>
           </div>
 
@@ -862,10 +879,12 @@ export default function BeneficiarySatisfactionView({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-semibold">
               {filteredSurveys.length > 0 ? (
                 filteredSurveys.map((survey, idx) => {
-                  const staffVal = Number(survey.staffSatisfaction) || 0;
-                  const recepVal = Number(survey.receptionSatisfaction) || 0;
-                  const isRated = staffVal > 0 || recepVal > 0;
-                  const avgVal = isRated ? (((staffVal || 5) + (recepVal || 5)) / 2).toFixed(1) : '-';
+                  const staffVal = getStaffVal(survey);
+                  const recepVal = getRecepVal(survey);
+                  const isRated = isSurveyRated(survey);
+                  const sVal = staffVal || (recepVal || 5);
+                  const rVal = recepVal || (staffVal || 5);
+                  const avgVal = isRated ? ((sVal + rVal) / 2).toFixed(1) : '-';
                   const cleanNotes = getCleanBeneficiaryNotes(survey.notes);
 
                   const isBoy = survey.gender === 'boys' || (survey.schoolName && (survey.schoolName.includes('بنين') || survey.schoolName.includes('ابتدائية') || survey.schoolName.includes('متوسطة') || survey.schoolName.includes('ثانوية')) && !survey.schoolName.includes('بنات') && !survey.schoolName.includes('طفولة مبكرة'));
@@ -873,14 +892,21 @@ export default function BeneficiarySatisfactionView({
                   return (
                     <tr 
                       key={survey.id}
-                      className="hover:bg-amber-50/40 dark:hover:bg-teal-950/20 transition-colors"
+                      className={`transition-colors ${
+                        isRated ? 'bg-emerald-50/20 dark:bg-emerald-950/10 hover:bg-emerald-100/30' : 'hover:bg-amber-50/40 dark:hover:bg-teal-950/20'
+                      }`}
                     >
                       <td className="p-3.5 text-center font-mono text-slate-400">
                         {idx + 1}
                       </td>
                       <td className="p-3.5">
-                        <span className="font-extrabold block text-slate-900 dark:text-white">
+                        <span className="font-extrabold block text-slate-900 dark:text-white flex items-center gap-1.5">
                           {survey.beneficiaryName || 'غير مدون'}
+                          {survey.beneficiaryEvaluationSubmitted && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-black rounded-md bg-emerald-600 text-white animate-pulse">
+                              ✨ تم التقييم
+                            </span>
+                          )}
                         </span>
                         <span className="text-[10px] text-slate-400 font-mono block">
                           {survey.phoneNumber}
@@ -916,6 +942,11 @@ export default function BeneficiarySatisfactionView({
                             <Star className="w-3.5 h-3.5 fill-amber-400" />
                             {staffVal}
                           </span>
+                        ) : isRated ? (
+                          <span className="inline-flex items-center gap-1 text-amber-500 font-mono font-bold">
+                            <Star className="w-3.5 h-3.5 fill-amber-400" />
+                            {sVal}
+                          </span>
                         ) : (
                           <span className="text-slate-400 text-[10px]">-</span>
                         )}
@@ -926,6 +957,11 @@ export default function BeneficiarySatisfactionView({
                             <Star className="w-3.5 h-3.5 fill-amber-400" />
                             {recepVal}
                           </span>
+                        ) : isRated ? (
+                          <span className="inline-flex items-center gap-1 text-amber-500 font-mono font-bold">
+                            <Star className="w-3.5 h-3.5 fill-amber-400" />
+                            {rVal}
+                          </span>
                         ) : (
                           <span className="text-slate-400 text-[10px]">-</span>
                         )}
@@ -934,10 +970,10 @@ export default function BeneficiarySatisfactionView({
                         {isRated ? (
                           <span className={`inline-block px-2.5 py-1 rounded-xl font-black font-mono text-[11px] ${
                             Number(avgVal) >= 4.5
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
                               : Number(avgVal) >= 3.5
-                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
+                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-700'
                           }`}>
                             ⭐ {avgVal} / 5
                           </span>

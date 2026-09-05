@@ -348,7 +348,11 @@ export default function App() {
       isSynced: isOnline
     };
 
-    setSurveys((prev) => [newResponse, ...prev]);
+    setSurveys((prev) => {
+      const next = [newResponse, ...prev];
+      saveSurveysToStorage(next);
+      return next;
+    });
 
     const ratedStaff = newResponse.staffSatisfaction && newResponse.staffSatisfaction > 0;
     const ratedReception = newResponse.receptionSatisfaction && newResponse.receptionSatisfaction > 0;
@@ -387,7 +391,22 @@ export default function App() {
   };
 
   const handleDeleteSurvey = (id: string) => {
-    setSurveys((prev) => prev.filter((s) => s.id !== id));
+    setSurveys((prev) => {
+      const next = prev.filter((s) => s.id !== id);
+      saveSurveysToStorage(next, { isConfirmedAdminClear: next.length === 0 });
+      return next;
+    });
+  };
+
+  const handleUpdateSurvey = (updatedSurvey: SurveyResponse) => {
+    setSurveys((prev) => {
+      const exists = prev.some((s) => s.id === updatedSurvey.id);
+      const next = exists
+        ? prev.map((s) => (s.id === updatedSurvey.id ? updatedSurvey : s))
+        : [updatedSurvey, ...prev];
+      saveSurveysToStorage(next);
+      return next;
+    });
   };
 
   const handleDeleteReport = (id: string) => {
@@ -527,9 +546,7 @@ export default function App() {
                   surveys={surveys}
                   schools={schoolsList}
                   onToggleResolved={handleToggleResolved}
-                  onUpdateSurvey={(updatedSurvey) => {
-                    setSurveys(prev => prev.map(s => s.id === updatedSurvey.id ? updatedSurvey : s));
-                  }}
+                  onUpdateSurvey={handleUpdateSurvey}
                   config={config}
                   onSelectRole={setUserRole}
                   principalReports={principalReports}
@@ -552,9 +569,7 @@ export default function App() {
                   currentLang={currentLang}
                   onSubmit={handleAddSurvey}
                   schools={schoolsList}
-                  onUpdateSurvey={(updatedSurvey) => {
-                    setSurveys(prev => prev.map(s => s.id === updatedSurvey.id ? updatedSurvey : s));
-                  }}
+                  onUpdateSurvey={handleUpdateSurvey}
                   config={config}
                   isOnline={isOnline}
                   onBackToPortal={() => setUserRole('portal')}
@@ -577,9 +592,7 @@ export default function App() {
                     onToggleResolved={handleToggleResolved}
                     onImportSurveys={handleImportSurveys}
                     onAddSurvey={handleAddSurvey}
-                    onUpdateSurvey={(updatedSurvey) => {
-                      setSurveys(prev => prev.map(s => s.id === updatedSurvey.id ? updatedSurvey : s));
-                    }}
+                    onUpdateSurvey={handleUpdateSurvey}
                     config={config}
                     onUpdateConfig={handleUpdateConfig}
                     emailLogs={emailLogs}
