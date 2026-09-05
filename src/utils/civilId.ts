@@ -293,6 +293,55 @@ export const extractSchoolNameFromSchool = (school: any): string => {
 };
 
 /**
+ * Cleanly formats principal names and strips duplicate honorifics (e.g. 'أ.', 'أ/ ', 'الأستاذ', etc.)
+ * so that displaying "مرحباً بك، أ. [الاسم]" renders cleanly as "مرحباً بك، أ. [اسم مدير المدرسة]"
+ * without producing "مرحباً بك أ. أ. ...".
+ */
+export const formatPrincipalName = (name: string | undefined | null): string => {
+  if (!name) return 'مدير المدرسة';
+  let str = String(name).trim();
+  
+  // Strip leading honorifics like "أ.", "أ. ", "أ/ ", "أ/", "الأستاذ ", "الأستاذ/ ", "الأستاذة ", "سعادة "
+  str = str.replace(/^(أ\.\s*|أ\/\s*|الأستاذ\/\s*|الأستاذ\s+|الأستاذة\/\s*|الأستاذة\s+|سعادة\s+)+/gi, '').trim();
+  
+  return str || 'مدير المدرسة';
+};
+
+/**
+ * Cleanly formats the principal greeting.
+ * If the provided name is an actual person's name (e.g. "عبدالله الحربي"),
+ * it formats as: "مرحباً بك، أ. عبدالله الحربي".
+ * If it is a generic title/role (e.g. "مدير متوسطة سعد بن خيثمة الأنصاري" or "مدير المدرسة"),
+ * it formats as: "مرحباً بك، مدير متوسطة سعد بن خيثمة الأنصاري" without adding an awkward "أ.".
+ */
+export const formatPrincipalGreeting = (
+  principalName: string | undefined | null,
+  isRtl: boolean = true
+): string => {
+  if (!principalName) {
+    return isRtl ? 'مرحباً بك، مدير المدرسة' : 'Welcome, School Principal';
+  }
+
+  let clean = String(principalName).trim();
+
+  // Strip redundant leading honorifics
+  clean = clean.replace(/^(أ\.\s*|أ\/\s*|الأستاذ\/\s*|الأستاذ\s+|الأستاذة\/\s*|الأستاذة\s+|سعادة\s+)+/gi, '').trim();
+
+  if (!clean) {
+    return isRtl ? 'مرحباً بك، مدير المدرسة' : 'Welcome, School Principal';
+  }
+
+  // Detect if clean name is a generic job title/school role vs an actual person's name
+  const isJobTitle = /^(مدير|مديرة|قائد|قائدة|مسؤول|مسؤولة|مدير\/ة|قائد\/ة)(\s+|$)/i.test(clean) || clean === 'غير محدد';
+
+  if (isJobTitle) {
+    return isRtl ? `مرحباً بك، ${clean}` : `Welcome, ${clean}`;
+  } else {
+    return isRtl ? `مرحباً بك، أ. ${clean}` : `Welcome, Principal ${clean}`;
+  }
+};
+
+/**
  * Extracts principal name, civil ID, mobile, and ministerial code from school record dynamically.
  */
 export const extractPrincipalInfoFromSchool = (school: any): { 
@@ -303,19 +352,36 @@ export const extractPrincipalInfoFromSchool = (school: any): {
   schoolName: string;
 } => {
   if (!school) {
-    return { name: 'أ. مدير المدرسة', civilId: '', mobile: '0550000000', code: '45013', schoolName: 'المدرسة' };
+    return { name: 'مدير المدرسة', civilId: '', mobile: '0550000000', code: '45013', schoolName: 'المدرسة' };
   }
 
   const cf = school.customFields;
 
-  // 1. Extract Principal Name
+  // 1. Extract Principal Name from Excel / record custom fields or properties
   const rawName = 
-    (cf && (cf['اسم مدير المدرسة'] || cf['اسم مدير/ة المدرسة'] || cf['اسم المدير'] || cf['اسم المديرة'] || cf['مدير المدرسة'] || cf['المدير'] || cf['المديرة'])) ||
+    (cf && (
+      cf['اسم مدير المدرسة'] || 
+      cf['اسم مديرة المدرسة'] || 
+      cf['اسم مدير/ة المدرسة'] || 
+      cf['اسم المدير'] || 
+      cf['اسم المديرة'] || 
+      cf['مدير المدرسة'] || 
+      cf['مديرة المدرسة'] || 
+      cf['اسم قائد المدرسة'] || 
+      cf['قائد المدرسة'] || 
+      cf['المدير'] || 
+      cf['المديرة'] ||
+      cf['اسم المسؤول']
+    )) ||
     school['اسم مدير المدرسة'] ||
+    school['اسم مديرة المدرسة'] ||
+    school['اسم مدير/ة المدرسة'] ||
     school['اسم المدير'] ||
+    school['اسم المديرة'] ||
+    school['مدير المدرسة'] ||
     school.principalName ||
     school.managerName ||
-    (school.nameAr ? `أ. مدير ${school.nameAr}` : 'غير محدد');
+    (school.nameAr ? `مدير ${school.nameAr}` : 'مدير المدرسة');
 
   // 2. Extract Principal Civil ID
   const rawCivilId = 

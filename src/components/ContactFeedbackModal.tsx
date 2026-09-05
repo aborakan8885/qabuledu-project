@@ -105,7 +105,7 @@ export default function ContactFeedbackModal({
               <div className="flex items-center gap-2">
                 <Code2 className="w-5 h-5 text-[#218caa] dark:text-[#69cee3]" />
                 <h4 className="font-extrabold text-sm sm:text-base text-[#1b6583] dark:text-cyan-200">
-                  👨‍💻 نبذة عن المبرمج ورقم التواصل
+                  👨‍💻 نبذة عن المطور ورقم التواصل
                 </h4>
               </div>
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-[#218caa] text-white shadow-2xs">

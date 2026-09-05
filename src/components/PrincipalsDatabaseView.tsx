@@ -324,7 +324,7 @@ export const PrincipalsDatabaseView: React.FC<PrincipalsDatabaseViewProps> = ({
             originalRow: row,
             nameAr: schName,
             ministryCode: minCode,
-            principalName: pName || `أ. مدير ${schName}`,
+            principalName: pName || `مدير ${schName}`,
             principalCivilId: pCivilId,
             principalMobile: pMobile || '—',
             stage,
@@ -620,7 +620,7 @@ export const PrincipalsDatabaseView: React.FC<PrincipalsDatabaseViewProps> = ({
         district: formData.district,
         principalId: cleanId || undefined,
         principalCivilId: cleanId || undefined,
-        principalName: formData.principalName.trim() || `أ. مدير ${formData.nameAr}`,
+        principalName: formData.principalName.trim() || `مدير ${formData.nameAr}`,
         principalMobile: formData.principalMobile.trim(),
         customFields: {
           'اسم المدرسة': formData.nameAr.trim(),

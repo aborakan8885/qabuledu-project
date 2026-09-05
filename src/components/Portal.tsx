@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { verifyCivilIdMatch, extractCivilIdFromSchool, cleanDigitsString, findSchoolsByPrincipalCivilId, extractPrincipalInfoFromSchool, extractSchoolNameFromSchool } from '../utils/civilId';
+import { verifyCivilIdMatch, extractCivilIdFromSchool, cleanDigitsString, findSchoolsByPrincipalCivilId, extractPrincipalInfoFromSchool, extractSchoolNameFromSchool, formatPrincipalName, formatPrincipalGreeting } from '../utils/civilId';
 import { AgeVerificationModal } from './AgeVerificationModal';
 import { 
   Map,
@@ -38,7 +38,8 @@ import {
   ArrowRightLeft,
   CreditCard,
   Loader2,
-  Database
+  Database,
+  Edit3
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Language, SurveyResponse, AppConfig, PrincipalReport, SchoolItem } from '../types';
@@ -2870,10 +2871,15 @@ export default function Portal({
                             // Auto-retrieve principal name from file / customFields or generated default
                             const retrievedName = (matched as any).principalName || 
                               matched.customFields?.['اسم مدير المدرسة'] || 
+                              matched.customFields?.['اسم مديرة المدرسة'] || 
                               matched.customFields?.['اسم مدير/ة المدرسة'] || 
                               matched.customFields?.['اسم المدير'] || 
+                              matched.customFields?.['اسم المديرة'] || 
+                              matched.customFields?.['مدير المدرسة'] || 
+                              matched.customFields?.['مديرة المدرسة'] || 
+                              matched.customFields?.['اسم قائد المدرسة'] || 
                               matched.customFields?.['المدير'] || 
-                              `أ. مدير ${matched.nameAr}`;
+                              `مدير ${matched.nameAr}`;
                             setPrincipalName(retrievedName);
 
                             // Auto-retrieve principal mobile from file / customFields or generated default
@@ -3259,7 +3265,14 @@ export default function Portal({
                                 setSchoolName(s.nameAr);
                                 setSchoolCode(s.ministryCode || (s as any).code);
                                 // Set principal details
-                                const pName = (s as any).principalName || s.customFields?.['اسم مدير المدرسة'] || `أ. مدير ${s.nameAr}`;
+                                const pName = (s as any).principalName || 
+                                  s.customFields?.['اسم مدير المدرسة'] || 
+                                  s.customFields?.['اسم مديرة المدرسة'] || 
+                                  s.customFields?.['اسم مدير/ة المدرسة'] || 
+                                  s.customFields?.['اسم المدير'] || 
+                                  s.customFields?.['اسم المديرة'] || 
+                                  s.customFields?.['مدير المدرسة'] || 
+                                  `مدير ${s.nameAr}`;
                                 setPrincipalName(pName);
                                 const pMobile = (s as any).principalMobile || s.customFields?.['رقم الجوال'] || '0550000000';
                                 setPrincipalMobile(pMobile);
@@ -3525,7 +3538,7 @@ export default function Portal({
                   {isRtl ? 'بوابة المدير المعتمدة والآمنة' : 'Verified Principal Portal'}
                 </span>
                 <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight leading-tight">
-                  {isRtl ? `مرحباً بك، أ. ${principalSession.principalName}` : `Welcome, Principal ${principalSession.principalName}`}
+                  {formatPrincipalGreeting(principalSession.principalName, isRtl)}
                 </h1>
                 <p className={`text-xs sm:text-sm font-medium leading-relaxed ${isDark ? 'text-teal-200/90' : 'text-emerald-100/90'}`}>
                   {isRtl 

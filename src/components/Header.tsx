@@ -7,6 +7,7 @@ import React from 'react';
 import { Languages, Home, Sun, Moon, ArrowRight, ArrowLeft, Lock } from 'lucide-react';
 import { Language, AppConfig } from '../types';
 import { TRANSLATIONS } from '../data/mockData';
+import { formatPrincipalName, formatPrincipalGreeting } from '../utils/civilId';
 
 interface HeaderProps {
   currentLang: Language;
@@ -67,9 +68,7 @@ export default function Header({
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 shadow-inner animate-fade-in">
               <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
               <span className="text-[10px] sm:text-xs font-black text-white">
-                {isRtl 
-                  ? `مرحباً بك أ. ${principalSession.principalName} - مدرسة: ${principalSession.schoolName}` 
-                  : `Welcome Principal ${principalSession.principalName} - School: ${principalSession.schoolName}`}
+                {formatPrincipalGreeting(principalSession.principalName, isRtl)} - {isRtl ? `مدرسة: ${principalSession.schoolName}` : `School: ${principalSession.schoolName}`}
               </span>
             </div>
           </div>

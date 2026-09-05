@@ -458,6 +458,23 @@ export const TRANSLATIONS = {
 };
 
 export const INITIAL_SCHOOLS: SchoolItem[] = [
+  {
+    id: 'sch_40386',
+    nameAr: 'متوسطة سعد بن خيثمة الأنصاري',
+    nameEn: 'Saad Bin Khaitahma Intermediate School',
+    ministryCode: '40386',
+    stage: 'Intermediate',
+    gender: 'boys',
+    district: 'القطاع الشمالي',
+    principalId: '1234567890',
+    customFields: {
+      'اسم المدرسة': 'متوسطة سعد بن خيثمة الأنصاري',
+      'هوية مدير المدرسة': '1234567890',
+      'اسم مدير المدرسة': 'عبدالرحمن الأحمدي',
+      'رقم جوال مدير المدرسة': '0551234567',
+      'الرقم الوزاري': '40386'
+    }
+  },
   { 
     id: 'sch_101', 
     nameAr: 'مدرسة أحد الابتدائية', 

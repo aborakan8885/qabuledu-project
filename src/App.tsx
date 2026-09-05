@@ -663,39 +663,45 @@ export default function App() {
       />
       
       {/* Floating Action Buttons Matching Requested Adjustments */}
-      {/* 1. Right Side: Back to Main Gateway */}
+      {/* 1. Right Side: Back to Main Gateway (الرئيسية) */}
       {(userRole !== 'portal' || portalView !== 'selection') && (
         <button
           onClick={handleReturnToMainGateway}
           className="fixed bottom-4 right-4 z-40 bg-[#16222f]/95 hover:bg-[#1f2f42] text-white font-black text-sm sm:text-base px-4.5 py-3 sm:px-5 sm:py-3.5 rounded-2xl shadow-2xl border border-slate-700/80 flex items-center gap-2.5 transition-all duration-300 active:scale-95 cursor-pointer backdrop-blur-md"
           title={currentLang === 'ar' ? 'الشاشة الرئيسية' : 'Home Page'}
+          id="floating-home-btn"
         >
           <span>{currentLang === 'ar' ? 'الرئيسية' : 'Home'}</span>
-          <Home className="w-6.5 h-6.5 text-emerald-400 stroke-[2.2]" />
+          <Home className="w-5.5 h-5.5 sm:w-6 sm:h-6 text-emerald-400 stroke-[2.2]" />
         </button>
       )}
 
-      {/* 2. Left Side: Go Back Button */}
-      {(userRole !== 'portal' || portalView !== 'selection' || historyStackRef.current.length > 0) && (
+      {/* 2. Left Side Group: "تواصل معنا" and "الخلف" side-by-side (Back on the right of Contact Us, aligned with Home) */}
+      <div className="fixed bottom-4 left-4 z-40 flex items-center gap-2 sm:gap-2.5 [direction:ltr]">
+        {/* Leftmost: Contact Feedback Button (تواصل معنا) - Compact White Style */}
         <button
-          onClick={handleGoBack}
-          className="fixed bottom-4 left-4 z-40 bg-[#16222f]/95 hover:bg-[#1f2f42] text-white font-black text-sm sm:text-base px-4.5 py-3 sm:px-5 sm:py-3.5 rounded-2xl shadow-2xl border border-slate-700/70 flex items-center gap-2.5 transition-all duration-300 active:scale-95 cursor-pointer backdrop-blur-md"
-          title={currentLang === 'ar' ? 'عودة للخلف' : 'Go Back'}
+          onClick={() => setIsFeedbackModalOpen(true)}
+          className="bg-white/95 hover:bg-slate-50 text-slate-800 dark:bg-slate-100 dark:hover:bg-white font-bold text-xs sm:text-xs px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl shadow-lg border border-slate-200/90 dark:border-slate-300 flex items-center gap-1.5 transition-all duration-200 active:scale-95 cursor-pointer backdrop-blur-md hover:shadow-xl"
+          title={currentLang === 'ar' ? 'للتواصل وإبداء الملاحظات' : 'Contact & Feedback'}
+          id="floating-contact-btn"
         >
-          <span>{currentLang === 'ar' ? 'عودة' : 'Back'}</span>
-          <RotateCcw className="w-6.5 h-6.5 text-cyan-300 stroke-[2.2]" />
+          <MessageSquareHeart className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-teal-600 shrink-0" />
+          <span>{currentLang === 'ar' ? 'تواصل معنا' : 'Contact Us'}</span>
         </button>
-      )}
 
-      {/* 3. Left Side: Contact Feedback Pill (pinned directly to the bottom-left corner) */}
-      <button
-        onClick={() => setIsFeedbackModalOpen(true)}
-        className="fixed bottom-2.5 left-2.5 z-40 bg-white/95 dark:bg-slate-800/95 text-teal-800 dark:text-teal-200 hover:bg-teal-50 dark:hover:bg-slate-700 font-bold text-xs sm:text-sm px-3 py-1.5 rounded-xl shadow-md border border-teal-200/60 dark:border-teal-700/40 flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-        title={currentLang === 'ar' ? 'للتواصل وإبداء الملاحظات' : 'Contact & Feedback'}
-      >
-        <MessageSquareHeart className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-teal-600 dark:text-teal-400 shrink-0" />
-        <span>{currentLang === 'ar' ? 'تواصل معنا' : 'Contact Us'}</span>
-      </button>
+        {/* Right of Contact Us: Go Back Button (الخلف) */}
+        {(userRole !== 'portal' || portalView !== 'selection' || historyStackRef.current.length > 0) && (
+          <button
+            onClick={handleGoBack}
+            className="bg-[#16222f]/95 hover:bg-[#1f2f42] text-white font-black text-sm sm:text-base px-4.5 py-3 sm:px-5 sm:py-3.5 rounded-2xl shadow-2xl border border-slate-700/80 flex items-center gap-2.5 transition-all duration-300 active:scale-95 cursor-pointer backdrop-blur-md"
+            title={currentLang === 'ar' ? 'الرجوع للخلف' : 'Go Back'}
+            id="floating-back-btn"
+          >
+            <span>{currentLang === 'ar' ? 'الخلف' : 'Back'}</span>
+            <RotateCcw className="w-5.5 h-5.5 sm:w-6 sm:h-6 text-cyan-300 stroke-[2.2]" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
