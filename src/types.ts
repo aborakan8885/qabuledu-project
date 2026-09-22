@@ -93,6 +93,13 @@ export interface SurveyResponse {
   principalConfirmedStaffing?: boolean;
   returnedByPrincipal?: boolean;
   principalReturnReason?: string;
+  vacancyRequestNotes?: string;
+  assignedRegistrationSchool?: string;
+  assignedRegistrationSchoolCode?: string;
+  assignedRegistrationSchoolNotes?: string;
+  assignedRegistrationSchoolAt?: string;
+  assignedBySupervisorName?: string;
+  principalTaskType?: 'add_student_file' | string;
   returnedAt?: string;
   principalReturnedAt?: string;
   planningReResolvedAt?: string;

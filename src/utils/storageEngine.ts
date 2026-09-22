@@ -785,14 +785,18 @@ export function isMatchingPrincipalSchool(
   const pNorm = normalizeArabicText(pName);
 
   const sCode = String(survey.schoolCode || '').trim();
-  if (pCode && sCode && sCode === pCode) return true;
+  const aCode = String((survey as any).assignedRegistrationSchoolCode || '').trim();
+  if (pCode && ((sCode && sCode === pCode) || (aCode && aCode === pCode))) return true;
 
   const sName = String(survey.schoolName || '').trim();
-  if (sName) {
-    const sNorm = normalizeArabicText(sName);
-    const sClean = cleanSchoolName(sName);
-    if (sNorm === pNorm || (pClean && sClean && (sClean.includes(pClean) || pClean.includes(sClean)))) {
-      return true;
+  const aName = String((survey as any).assignedRegistrationSchool || '').trim();
+  for (const candidate of [sName, aName]) {
+    if (candidate) {
+      const sNorm = normalizeArabicText(candidate);
+      const sClean = cleanSchoolName(candidate);
+      if (sNorm === pNorm || (pClean && sClean && (sClean.includes(pClean) || pClean.includes(sClean)))) {
+        return true;
+      }
     }
   }
 

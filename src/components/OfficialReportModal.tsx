@@ -14,7 +14,19 @@ import {
   Sparkles,
   LayoutTemplate,
   Sliders,
-  Maximize2
+  Maximize2,
+  Layers,
+  Clock,
+  Percent,
+  Star,
+  AlertTriangle,
+  GraduationCap,
+  School,
+  BookOpen,
+  Baby,
+  Award,
+  FileCheck,
+  FileBadge
 } from 'lucide-react';
 import { saveAs } from 'file-saver';
 import {
@@ -23,7 +35,8 @@ import {
   exportReportToPdf,
   exportReportToWord,
   exportReportToExcel,
-  exportReportAllFormats
+  exportReportAllFormats,
+  printReportDirectly
 } from '../utils/reportExporter';
 import { getPortraitKlicheSvg, getLandscapeKlicheSvg } from '../utils/klicheAssets';
 
@@ -47,6 +60,7 @@ export const OfficialReportModal: React.FC<OfficialReportModalProps> = ({
   const [statusState, setStatusState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [previewTab, setPreviewTab] = useState<'visual' | 'data'>('visual');
+  const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('all');
 
   const previewContainerRef = useRef<HTMLDivElement>(null);
 
@@ -75,17 +89,34 @@ export const OfficialReportModal: React.FC<OfficialReportModalProps> = ({
       const baseFilename = `تقرير_وحدة_القبول_${safeReportNum}`;
 
       if (format === 'pdf') {
-        const blob = await exportReportToPdf(currentData);
-        saveAs(blob, `${baseFilename}.pdf`);
-        setStatusState('success');
-        setStatusMessage('تم إنشاء وتحميل ملف PDF بنجاح.');
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('EXPORT_TIMEOUT')), 15000);
+        });
+
+        try {
+          const blob = await Promise.race([
+            exportReportToPdf(currentData, null, (progressMsg) => {
+              setStatusMessage(progressMsg);
+            }),
+            timeoutPromise
+          ]);
+          saveAs(blob, `${baseFilename}.pdf`);
+          setStatusState('success');
+          setStatusMessage('تم استخراج وتحميل ملف PDF عالي الجودة بنجاح ✓');
+        } catch (pdfErr: any) {
+          console.warn('Direct PDF canvas generation took longer than threshold or had an issue, fallback to instant print:', pdfErr);
+          setStatusMessage('جارٍ فتح نافذة الطباعة والحفظ الفوري كـ PDF...');
+          printReportDirectly(currentData);
+          setStatusState('success');
+          setStatusMessage('تم فتح نافذة الطباعة الرسمية والحفظ كـ PDF بنجاح ✓');
+        }
       } else if (format === 'word') {
         const blob = await exportReportToWord(currentData);
         saveAs(blob, `${baseFilename}.docx`);
         setStatusState('success');
         setStatusMessage('تم إنشاء وتحميل مستند Word (.docx) بنجاح.');
       } else if (format === 'excel') {
-        const blob = exportReportToExcel(currentData);
+        const blob = await exportReportToExcel(currentData);
         saveAs(blob, `${baseFilename}.xlsx`);
         setStatusState('success');
         setStatusMessage('تم إنشاء وتحميل جدول Excel (.xlsx) بنجاح.');
@@ -108,7 +139,67 @@ export const OfficialReportModal: React.FC<OfficialReportModalProps> = ({
     }
   };
 
+  // Direct vector print / save as PDF via native browser dialog
+  const handlePrint = () => {
+    try {
+      const currentData: ReportExportData = {
+        ...reportData,
+        orientation: orientationMode
+      };
+      printReportDirectly(currentData);
+      setStatusState('success');
+      setStatusMessage('تم فتح نافذة الطباعة الرسمية / الحفظ كـ PDF بنجاح ✓');
+    } catch (err) {
+      console.error('Print error:', err);
+      setStatusState('error');
+      setStatusMessage('تعذر تشغيل نافذة الطباعة، يرجى المحاولة لاحقاً.');
+    }
+  };
+
   const klicheSvg = isLandscape ? getLandscapeKlicheSvg() : getPortraitKlicheSvg();
+
+  const getSummaryItemIcon = (label: string, iconKey?: string) => {
+    if (iconKey === 'layers' || label.includes('إجمالي')) {
+      return <Layers className="w-3.5 h-3.5 text-blue-600 shrink-0" />;
+    }
+    if (iconKey === 'check-circle' || label.includes('المنجزة')) {
+      return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />;
+    }
+    if (iconKey === 'clock' || label.includes('الجارية')) {
+      return <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />;
+    }
+    if (iconKey === 'percent' || label.includes('نسبة')) {
+      return <Percent className="w-3.5 h-3.5 text-teal-600 shrink-0" />;
+    }
+    if (iconKey === 'star' || label.includes('رضا')) {
+      return <Star className="w-3.5 h-3.5 text-amber-500 shrink-0" />;
+    }
+    if (iconKey === 'alert-triangle' || label.includes('بلاغات')) {
+      return <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />;
+    }
+    if (iconKey === 'graduation-cap' || (label.includes('المرحلة الثانوية') && !label.includes('معادلات'))) {
+      return <GraduationCap className="w-3.5 h-3.5 text-purple-600 shrink-0" />;
+    }
+    if (iconKey === 'school' || (label.includes('المرحلة المتوسطة') && !label.includes('معادلات'))) {
+      return <School className="w-3.5 h-3.5 text-sky-600 shrink-0" />;
+    }
+    if (iconKey === 'book-open' || (label.includes('المرحلة الابتدائية') && !label.includes('معادلات'))) {
+      return <BookOpen className="w-3.5 h-3.5 text-emerald-600 shrink-0" />;
+    }
+    if (iconKey === 'baby' || label.includes('الطفولة المبكرة') || label.includes('رياض الأطفال')) {
+      return <Baby className="w-3.5 h-3.5 text-pink-500 shrink-0" />;
+    }
+    if (iconKey === 'award' || label.includes('معادلات المرحلة الثانوية')) {
+      return <Award className="w-3.5 h-3.5 text-indigo-600 shrink-0" />;
+    }
+    if (iconKey === 'file-text' || label.includes('معادلات المرحلة المتوسطة')) {
+      return <FileText className="w-3.5 h-3.5 text-cyan-600 shrink-0" />;
+    }
+    if (iconKey === 'file-badge' || label.includes('معادلات المرحلة الابتدائية')) {
+      return <FileBadge className="w-3.5 h-3.5 text-teal-600 shrink-0" />;
+    }
+    return <FileText className="w-3.5 h-3.5 text-teal-600 shrink-0" />;
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/80 backdrop-blur-md animate-fade-in overflow-y-auto" dir="rtl">
@@ -262,16 +353,16 @@ export const OfficialReportModal: React.FC<OfficialReportModalProps> = ({
                 type="button"
                 onClick={() => handleExport(selectedFormat)}
                 disabled={statusState === 'loading'}
-                className="w-full py-3.5 px-4 bg-gradient-to-r from-[#218caa] to-[#3078a6] hover:from-[#1b738e] hover:to-[#2883a4] text-white font-black text-xs sm:text-sm rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                className="w-full py-3.5 px-4 bg-gradient-to-r from-[#006C70] to-[#218caa] hover:from-[#005558] hover:to-[#1b738e] text-white font-black text-xs sm:text-sm rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75"
               >
                 {statusState === 'loading' ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin text-white" />
-                    <span>جارٍ إعداد التقرير...</span>
+                    <Loader2 className="w-4 h-4 animate-spin text-white shrink-0" />
+                    <span className="truncate">{statusMessage || 'جارٍ معالجة التقرير...'}</span>
                   </>
                 ) : (
                   <>
-                    <Download className="w-4 h-4 text-white" />
+                    <Download className="w-4 h-4 text-white shrink-0" />
                     <span>
                       {selectedFormat === 'pdf'
                         ? 'تصدير PDF عالي الجودة 📄'
@@ -283,25 +374,41 @@ export const OfficialReportModal: React.FC<OfficialReportModalProps> = ({
                 )}
               </button>
 
+              {/* Instant Browser Print / Save Vector PDF */}
+              <button
+                type="button"
+                onClick={handlePrint}
+                disabled={statusState === 'loading'}
+                className="w-full py-2.5 px-3 bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-900 dark:text-emerald-200 border border-emerald-500/40 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer"
+                title="طباعة فورية متوافقة مع كل الطابعات أو الحفظ كـ PDF متجهي فائق الدقة"
+              >
+                <Printer className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>طباعة رسمية مباشرة / حفظ PDF فوري 🖨️</span>
+                <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded-full font-bold">فوري ⚡</span>
+              </button>
+
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => handleExport('pdf')}
-                  className="py-2 px-2 bg-rose-600/10 hover:bg-rose-600/20 text-rose-700 dark:text-rose-300 border border-rose-300/40 rounded-xl text-[11px] font-bold transition-all text-center cursor-pointer"
+                  disabled={statusState === 'loading'}
+                  className="py-2 px-2 bg-rose-600/10 hover:bg-rose-600/20 text-rose-700 dark:text-rose-300 border border-rose-300/40 rounded-xl text-[11px] font-bold transition-all text-center cursor-pointer disabled:opacity-50"
                 >
-                  تصدير PDF
+                  تصدير PDF ⚡
                 </button>
                 <button
                   type="button"
                   onClick={() => handleExport('word')}
-                  className="py-2 px-2 bg-blue-600/10 hover:bg-blue-600/20 text-blue-700 dark:text-blue-300 border border-blue-300/40 rounded-xl text-[11px] font-bold transition-all text-center cursor-pointer"
+                  disabled={statusState === 'loading'}
+                  className="py-2 px-2 bg-blue-600/10 hover:bg-blue-600/20 text-blue-700 dark:text-blue-300 border border-blue-300/40 rounded-xl text-[11px] font-bold transition-all text-center cursor-pointer disabled:opacity-50"
                 >
                   تصدير Word
                 </button>
                 <button
                   type="button"
                   onClick={() => handleExport('excel')}
-                  className="py-2 px-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-700 dark:text-emerald-300 border border-emerald-300/40 rounded-xl text-[11px] font-bold transition-all text-center cursor-pointer"
+                  disabled={statusState === 'loading'}
+                  className="py-2 px-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-700 dark:text-emerald-300 border border-emerald-300/40 rounded-xl text-[11px] font-bold transition-all text-center cursor-pointer disabled:opacity-50"
                 >
                   تصدير Excel
                 </button>
@@ -312,9 +419,9 @@ export const OfficialReportModal: React.FC<OfficialReportModalProps> = ({
                 type="button"
                 onClick={() => handleExport('all')}
                 disabled={statusState === 'loading'}
-                className="w-full py-2.5 px-3 bg-amber-500/15 hover:bg-amber-500/25 text-amber-900 dark:text-amber-200 border border-amber-400/40 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-2.5 px-3 bg-amber-500/15 hover:bg-amber-500/25 text-amber-900 dark:text-amber-200 border border-amber-400/40 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
-                <Archive className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                <Archive className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                 <span>تصدير جميع الصيغ (حزمة ZIP شاملة) 📦</span>
               </button>
             </div>
@@ -407,15 +514,93 @@ export const OfficialReportModal: React.FC<OfficialReportModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Summary Metric Cards */}
-                  {reportData.summaryItems && reportData.summaryItems.length > 0 && (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-                      {reportData.summaryItems.map((item, idx) => (
-                        <div key={idx} className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-center">
-                          <div className="text-[10px] text-slate-500 font-bold">{item.label}</div>
-                          <div className="text-sm font-black text-[#006C70] mt-0.5">{item.value}</div>
+                  {/* Overall Summary Metric Cards (shown when not viewing a single specific governorate) */}
+                  {reportData.summaryItems && reportData.summaryItems.length > 0 && selectedSectionFilter === 'all' && (
+                    <div className="mb-4">
+                      <div className="text-[11px] font-bold text-[#006C70] mb-2 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#006C70]"></span>
+                        <span>المؤشرات الإجمالية العامة المعتمدة:</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                        {reportData.summaryItems.map((item, idx) => (
+                          <div key={idx} className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-center flex flex-col items-center justify-between">
+                            <div className="flex items-center justify-center gap-1 mb-1 w-full">
+                              {getSummaryItemIcon(item.label, item.icon)}
+                              <span className="text-[9.5px] sm:text-[10px] text-slate-600 font-bold leading-tight line-clamp-1">{item.label}</span>
+                            </div>
+                            <div className="text-xs sm:text-sm font-black text-[#006C70] mt-0.5">{item.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Governorate Sections (مقسم إلى أجزاء تشمل جميع الأيقونات الـ 13) */}
+                  {reportData.sections && reportData.sections.length > 0 && (
+                    <div className="mb-5 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-y border-slate-200 py-2.5 bg-slate-50/70 px-3 rounded-xl">
+                        <div className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-[#006C70]"></span>
+                          <span>التقرير مقسم حسب المحافظات (13 مؤشر لكل محافظة):</span>
                         </div>
-                      ))}
+                        <div className="flex flex-wrap items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedSectionFilter('all')}
+                            className={`px-2.5 py-1 text-[10.5px] font-bold rounded-lg transition-all cursor-pointer ${
+                              selectedSectionFilter === 'all'
+                                ? 'bg-[#006C70] text-white shadow-xs'
+                                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            عرض جميع المحافظات (8)
+                          </button>
+                          {reportData.sections.map(sec => (
+                            <button
+                              key={sec.id}
+                              type="button"
+                              onClick={() => setSelectedSectionFilter(sec.id)}
+                              className={`px-2 py-1 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                                selectedSectionFilter === sec.id
+                                  ? 'bg-[#006C70] text-white shadow-xs'
+                                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                              }`}
+                            >
+                              {sec.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Stacked Cards for each governorate section */}
+                      <div className="space-y-3.5">
+                        {reportData.sections
+                          .filter(sec => selectedSectionFilter === 'all' || sec.id === selectedSectionFilter)
+                          .map(sec => (
+                            <div key={sec.id} className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs">
+                              <div className="bg-[#006C70] text-white px-3.5 py-2 flex items-center justify-between text-xs font-black">
+                                <div className="flex items-center gap-2">
+                                  <span>📍</span>
+                                  <span>{sec.name}</span>
+                                </div>
+                                <span className="text-[9.5px] font-bold bg-white/20 px-2 py-0.5 rounded-full">
+                                  13 مؤشر إحصائي معتمد
+                                </span>
+                              </div>
+                              <div className="p-2.5 bg-slate-50/50 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                                {sec.summaryItems.map((item, idx) => (
+                                  <div key={idx} className="bg-white border border-slate-200/80 rounded-lg p-2 text-center flex flex-col items-center justify-between hover:border-teal-500/60 transition-all">
+                                    <div className="flex items-center justify-center gap-1 mb-1 w-full">
+                                      {getSummaryItemIcon(item.label, item.icon)}
+                                      <span className="text-[9px] sm:text-[9.5px] text-slate-600 font-bold leading-tight line-clamp-1">{item.label}</span>
+                                    </div>
+                                    <div className="text-xs sm:text-sm font-black text-[#006C70] mt-0.5">{item.value}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                      </div>
                     </div>
                   )}
 

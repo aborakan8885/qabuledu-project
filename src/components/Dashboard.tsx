@@ -65,7 +65,13 @@ import {
   UserPlus,
   CalendarCheck,
   Briefcase,
-  Upload
+  Upload,
+  ShieldCheck,
+  Unlock,
+  Baby,
+  FileBadge,
+  BookOpen,
+  Percent
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -90,10 +96,14 @@ import {
 } from '../utils/storageEngine';
 import { ReportExportData } from '../utils/reportExporter';
 import { OfficialReportModal } from './OfficialReportModal';
+import { getMoeLogoDataUrl } from '../utils/klicheAssets';
+import { calculateAllGovernoratesStats, buildGovernorateReportSections } from '../utils/governorateStats';
+import { GovernoratePartCard } from './GovernoratePartCard';
 import BeneficiarySatisfactionView from './BeneficiarySatisfactionView';
 import BeneficiaryFeedbackView from './BeneficiaryFeedbackView';
 import PrincipalsDatabaseView from './PrincipalsDatabaseView';
 import DateBackupModal from './DateBackupModal';
+import RegistrationReviewModal from './RegistrationReviewModal';
 import * as XLSX from 'xlsx';
 
 export function normalizeArabicText(text: string): string {
@@ -263,6 +273,9 @@ export default function Dashboard({
   // Detail Modal for survey
   const [selectedSurvey, setSelectedSurvey] = useState<SurveyResponse | null>(null);
 
+  // Dedicated Review & School Assignment Modal for New Registration Requests
+  const [reviewRegistrationSurvey, setReviewRegistrationSurvey] = useState<SurveyResponse | null>(null);
+
   // Inline Calendar Scheduling State
   const [openCalendarSurveyId, setOpenCalendarSurveyId] = useState<string | null>(null);
   const [inlineCalData, setInlineCalData] = useState<Record<string, {
@@ -305,6 +318,7 @@ export default function Dashboard({
   // Modals
   const [showOfficialModal, setShowOfficialModal] = useState(false);
   const [officialReportData, setOfficialReportData] = useState<ReportExportData | null>(null);
+  const [selectedReportsGovPart, setSelectedReportsGovPart] = useState<string>('all');
   const [showDateBackupModal, setShowDateBackupModal] = useState(false);
   const [showAddSchoolModal, setShowAddSchoolModal] = useState(false);
   const [showClearAllModal, setShowClearAllModal] = useState(false);
@@ -356,6 +370,44 @@ export default function Dashboard({
       schoolsCount: schools.length
     };
   }, [surveys, admissionSurveys, equivalencySurveys, principalReports, beneficiaryFeedbacks, emailLogs, schools]);
+
+  // Statistical stage breakdown for admission & equivalency
+  const stageStats = useMemo(() => {
+    const isSec = (s: SurveyResponse) => {
+      const stg = (s.stage || s.equalizationStage || '').trim().toLowerCase();
+      return stg === 'secondary' || stg.includes('ثانو') || stg.includes('second');
+    };
+    const isInter = (s: SurveyResponse) => {
+      const stg = (s.stage || s.equalizationStage || '').trim().toLowerCase();
+      return stg === 'intermediate' || stg.includes('متوسط') || stg.includes('intermed');
+    };
+    const isPrim = (s: SurveyResponse) => {
+      const stg = (s.stage || s.equalizationStage || '').trim().toLowerCase();
+      return stg === 'primary' || stg === 'elementary' || stg.includes('ابتدائ') || stg.includes('primar') || stg.includes('element');
+    };
+    const isEarly = (s: SurveyResponse) => {
+      const stg = (s.stage || s.equalizationStage || '').trim().toLowerCase();
+      return stg === 'kindergarten' || stg.includes('طفول') || stg.includes('رياض') || stg.includes('روض') || stg.includes('kinder');
+    };
+
+    const admSurveys = surveys.filter(s => !isSurveyEqualizationRequest(s));
+    const eqSurveys = surveys.filter(s => isSurveyEqualizationRequest(s));
+
+    return {
+      secAdmission: admSurveys.filter(isSec).length,
+      interAdmission: admSurveys.filter(isInter).length,
+      primAdmission: admSurveys.filter(isPrim).length,
+      earlyChildhoodAdmission: admSurveys.filter(isEarly).length,
+      secEq: eqSurveys.filter(isSec).length,
+      interEq: eqSurveys.filter(isInter).length,
+      primEq: eqSurveys.filter(isPrim).length,
+    };
+  }, [surveys]);
+
+  // Calculations for all 8 governorate parts (المدينة المنورة، الحناكية، خيبر، بدر، وادي الفرع، المهد، ينبع، العلا)
+  const governorateStatsList = useMemo(() => {
+    return calculateAllGovernoratesStats(surveys, principalReports);
+  }, [surveys, principalReports]);
 
   // Dynamic workflow count calculations for Admission & Transfer
   const workflowCounts = useMemo(() => {
@@ -520,6 +572,48 @@ export default function Dashboard({
     };
     onUpdateSurvey(updated);
     setClaimToastMessage(`تم استلام المعاملة وتوجيهها لمشرف القبول والتسجيل (${activeOfficer.nameAr}) بنجاح ✓`);
+    setTimeout(() => setClaimToastMessage(null), 4000);
+  };
+
+  // 1. Send Request to School Principal to Add Student File
+  const handleSendToPrincipalForStudentFile = (survey: SurveyResponse) => {
+    const targetSchool = survey.assignedRegistrationSchool || survey.schoolName || 'المدرسة';
+    const updated: SurveyResponse = {
+      ...survey,
+      sentToSchoolPrincipal: true,
+      sentToPrincipalAt: new Date().toISOString(),
+      principalTaskType: 'add_student_file'
+    };
+    onUpdateSurvey(updated);
+    setClaimToastMessage(`تم إرسال الطلب بنجاح إلى مدير ${targetSchool} لإضافة ملف الطالب 🏫✓`);
+    setTimeout(() => setClaimToastMessage(null), 4000);
+  };
+
+  // 2. Request Opening Vacancy from Planning Officer
+  const handleSendToPlanning = (survey: SurveyResponse) => {
+    const targetSchool = survey.assignedRegistrationSchool || survey.schoolName || survey.firstSchoolName || '';
+    const updated: SurveyResponse = {
+      ...survey,
+      ...(targetSchool && !survey.assignedRegistrationSchool ? { assignedRegistrationSchool: targetSchool } : {}),
+      isVacancyRequest: true,
+      vacancyRequestStatus: 'pending',
+      referredToPlanningAt: new Date().toISOString(),
+      eqReferredToPlanningAt: new Date().toISOString()
+    };
+    onUpdateSurvey(updated);
+    setClaimToastMessage("تم إرسال طلب فتح شاغر بنجاح لمسؤول التخطيط والميزانيات المدرسية 🔓✓");
+    setTimeout(() => setClaimToastMessage(null), 4000);
+  };
+
+  // 3. Send Request to School Leadership Officer for Follow-up
+  const handleSendToLeadership = (survey: SurveyResponse) => {
+    const updated: SurveyResponse = {
+      ...survey,
+      sentToLeadership: true,
+      sentToLeadershipAt: new Date().toISOString()
+    };
+    onUpdateSurvey(updated);
+    setClaimToastMessage("تم إرسال متابعة الطلب بنجاح إلى مسؤول القيادة المدرسية للمتابعة والإشراف 👤✓");
     setTimeout(() => setClaimToastMessage(null), 4000);
   };
 
@@ -1177,7 +1271,7 @@ export default function Dashboard({
 
     const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
-    const sheetTitle = activeFeature === 'equivalency_requests' ? 'سجل طلبات معادلة المؤهلات' : 'سجل طلبات القبول والتسجيل والنقل';
+    const sheetTitle = (activeFeature === 'equivalency_requests' ? 'طلبات معادلة المؤهلات' : 'طلبات القبول والتسجيل').slice(0, 30);
     XLSX.utils.book_append_sheet(wb, ws, sheetTitle);
     XLSX.writeFile(wb, `MOE_${activeFeature === 'equivalency_requests' ? 'Equivalency' : 'Admission'}_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
@@ -1197,13 +1291,21 @@ export default function Dashboard({
         gregorianDate: new Date().toLocaleDateString('ar-SA')
       },
       summaryItems: [
-        { label: 'إجمالي المعاملات المسجلة', value: surveys.length },
-        { label: 'المعاملات المنجزة والمغلقة', value: surveys.filter(s => s.isResolved).length },
-        { label: 'المعاملات الجارية وقيد المعالجة', value: surveys.filter(s => !s.isResolved).length },
-        { label: 'نسبة الإنجاز والمعالجة', value: `${stats.resRate}%` },
-        { label: 'معدل رضا المستفيدين', value: `${stats.avgSat} / 5` },
-        { label: 'بلاغات المدارس الميدانية', value: principalReports.length }
+        { label: 'إجمالي المعاملات المسجلة', value: surveys.length, icon: 'layers' },
+        { label: 'المعاملات المنجزة والمغلقة', value: surveys.filter(s => s.isResolved).length, icon: 'check-circle' },
+        { label: 'المعاملات الجارية وقيد المعالجة', value: surveys.filter(s => !s.isResolved).length, icon: 'clock' },
+        { label: 'نسبة إنجاز المعاملات', value: `${stats.resRate}%`, icon: 'percent' },
+        { label: 'معدل رضا المستفيدين', value: `${stats.avgSat} / 5`, icon: 'star' },
+        { label: 'بلاغات المدارس الميدانية', value: principalReports.length, icon: 'alert-triangle' },
+        { label: 'معاملات المرحلة الثانوية', value: stageStats.secAdmission, icon: 'graduation-cap' },
+        { label: 'معاملات المرحلة المتوسطة', value: stageStats.interAdmission, icon: 'school' },
+        { label: 'معاملات المرحلة الابتدائية', value: stageStats.primAdmission, icon: 'book-open' },
+        { label: 'معاملات مرحلة الطفولة المبكرة', value: stageStats.earlyChildhoodAdmission, icon: 'baby' },
+        { label: 'معاملات معادلات المرحلة الثانوية', value: stageStats.secEq, icon: 'award' },
+        { label: 'معاملات معادلات المرحلة المتوسطة', value: stageStats.interEq, icon: 'file-text' },
+        { label: 'معاملات معادلات المرحلة الابتدائية', value: stageStats.primEq, icon: 'file-badge' }
       ],
+      sections: buildGovernorateReportSections(surveys, principalReports),
       columns: [
         { header: 'المعرف', key: 'id', widthPercent: 12 },
         { header: 'المستفيد', key: 'beneficiary', widthPercent: 20 },
@@ -1260,7 +1362,7 @@ export default function Dashboard({
           <div className="flex items-center gap-4">
              <div className="w-14 h-14 bg-teal-50 dark:bg-teal-900/20 rounded-2xl flex items-center justify-center p-1">
                 <img 
-                  src="https://upload.wikimedia.org/wikipedia/ar/thumb/8/8c/Logo_of_Ministry_of_Education_%28Saudi_Arabia%29.svg/1200px-Logo_of_Ministry_of_Education_%28Saudi_Arabia%29.svg.png" 
+                  src={getMoeLogoDataUrl()} 
                   alt="MOE Logo" 
                   className="w-10 h-10 object-contain" 
                 />
@@ -1436,7 +1538,7 @@ export default function Dashboard({
               </div>
               <button
                  onClick={() => {
-                    setActiveFeature('leadership');
+                    setActiveFeature('placements');
                     setPlacementsSubTab('leadership');
                  }}
                  className="px-5 py-2.5 bg-white text-rose-900 hover:bg-rose-50 rounded-2xl text-xs font-black transition-all cursor-pointer shadow-md shrink-0 flex items-center gap-2"
@@ -1938,150 +2040,146 @@ export default function Dashboard({
                                           )}
                                        </div>
 
-                                       {/* Claim Button */}
-                                       {!(s.serviceEmployee && s.serviceEmployee !== 'غير مسند') && (
-                                          <button
-                                             type="button"
-                                             onClick={() => handleClaimAdmissionSurvey(s)}
-                                             className="w-full py-2 px-3 rounded-xl bg-[#009688] hover:bg-[#00796b] text-white font-black text-[11px] flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
-                                          >
-                                             <UserPlus className="w-3.5 h-3.5" />
-                                             <span>استلام الطلب</span>
-                                          </button>
-                                       )}
-
-                                       {/*                                        {/* Procedures Purple Container */}
-                                       <div className="p-3 rounded-2xl border border-teal-200/80 bg-teal-50/15 dark:bg-teal-950/10 space-y-3">
-                                          <div className="font-black text-[10px] text-teal-950 dark:text-teal-300 flex items-center justify-between">
+                                       {/* 📋 إجراءات مشرف وحدة القبول والتسجيل الخمسة المعتمدة */}
+                                       <div className="p-3 rounded-2xl border border-teal-200/80 bg-teal-50/15 dark:bg-teal-950/10 space-y-2.5">
+                                          <div className="font-black text-[10px] text-teal-950 dark:text-teal-300 flex items-center justify-between border-b border-teal-200/40 dark:border-teal-800/40 pb-1.5">
                                              <span className="flex items-center gap-1.5">
                                                 <FileText className="w-3.5 h-3.5 text-teal-600" />
                                                 <span>📋 إجراءات مشرف وحدة القبول والتسجيل:</span>
                                              </span>
+                                             <span className="text-[8.5px] font-bold text-teal-700 dark:text-teal-400 bg-teal-100 dark:bg-teal-900/40 px-2 py-0.5 rounded-md">
+                                                طلب تسجيل جديد
+                                             </span>
                                           </div>
 
-                                          {!(s.serviceEmployee && s.serviceEmployee !== 'غير مسند') ? (
-                                             <div className="space-y-1">
-                                                <div className="text-[9px] font-bold text-slate-500 text-right">1. استلام المعاملة وبدء المعالجة:</div>
+                                          <div className="space-y-1.5">
+                                             {/* 1. ايقونة استلام الطلب */}
+                                             <button
+                                                type="button"
+                                                onClick={() => handleClaimAdmissionSurvey(s)}
+                                                className={`w-full py-2 px-2.5 rounded-xl font-black text-[10px] flex items-center justify-between transition-all shadow-xs active:scale-95 cursor-pointer ${
+                                                   s.serviceEmployee && s.serviceEmployee !== 'غير مسند'
+                                                      ? "bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-900"
+                                                      : "bg-teal-600 hover:bg-teal-700 text-white shadow-teal-600/20"
+                                                }`}
+                                                title="استلام الطلب والبدء بالمعالجة"
+                                             >
+                                                <div className="flex items-center gap-1.5">
+                                                   <UserPlus className="w-3.5 h-3.5" />
+                                                   <span>1. استلام الطلب</span>
+                                                </div>
+                                                <span className="text-[8.5px] font-bold">
+                                                   {s.serviceEmployee && s.serviceEmployee !== 'غير مسند' ? `مستلم (${s.serviceEmployee}) ✓` : 'انقر للاستلام'}
+                                                </span>
+                                             </button>
+
+                                             {/* 2. ايقونة استعراض الطلب وعند الاستعراض يجب ان يكون هناك تحديد للمدرسة التي بها امكانية للتسجيل يحددها المشرف المسؤول */}
+                                             <button
+                                                type="button"
+                                                onClick={() => setReviewRegistrationSurvey(s)}
+                                                className={`w-full py-2 px-2.5 rounded-xl font-black text-[10px] flex items-center justify-between transition-all shadow-xs active:scale-95 cursor-pointer ${
+                                                   s.assignedRegistrationSchool
+                                                      ? "bg-emerald-50 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800"
+                                                      : "bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800"
+                                                }`}
+                                                title="استعراض الطلب وتحديد المدرسة التي بها إمكانية للتسجيل"
+                                             >
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                   <Eye className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+                                                   <span className="truncate">2. استعراض الطلب وتحديد مدرسة التسجيل</span>
+                                                </div>
+                                                <span className="text-[8.5px] font-bold shrink-0 max-w-[120px] truncate">
+                                                   {s.assignedRegistrationSchool ? `✓ ${s.assignedRegistrationSchool}` : 'تحديد مدرسة متاحة'}
+                                                </span>
+                                             </button>
+
+                                             {/* 3. ايقونة ارسال الطلب لمدير المدرسة لإضافة ملف الطالب */}
+                                             <button
+                                                type="button"
+                                                onClick={() => handleSendToPrincipalForStudentFile(s)}
+                                                className={`w-full py-2 px-2.5 rounded-xl font-black text-[10px] flex items-center justify-between transition-all shadow-xs active:scale-95 cursor-pointer ${
+                                                   s.sentToSchoolPrincipal
+                                                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-300 dark:border-emerald-900"
+                                                      : "bg-[#009688] hover:bg-[#00796b] text-white"
+                                                }`}
+                                                title="ارسال الطلب لمدير المدرسة لإضافة ملف الطالب"
+                                             >
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                   <Building2 className="w-3.5 h-3.5 shrink-0" />
+                                                   <span className="truncate">3. ارسال الطلب لمدير المدرسة لإضافة ملف الطالب</span>
+                                                </div>
+                                                <span className="text-[8.5px] font-bold shrink-0">
+                                                   {s.sentToSchoolPrincipal ? "تم الإرسال ✓" : "إرسال للمدير"}
+                                                </span>
+                                             </button>
+
+                                             {/* 4. ايقونة طلب فتح شاغر لمسؤول التخطيط */}
+                                             <button
+                                                type="button"
+                                                onClick={() => handleSendToPlanning(s)}
+                                                className={`w-full py-2 px-2.5 rounded-xl font-black text-[10px] flex items-center justify-between transition-all shadow-xs active:scale-95 cursor-pointer ${
+                                                   s.isVacancyRequest
+                                                      ? "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/20 dark:text-amber-300 dark:border-amber-900"
+                                                      : "bg-blue-600 hover:bg-blue-700 text-white"
+                                                }`}
+                                                title="طلب فتح شاغر لمسؤول التخطيط"
+                                             >
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                   <TrendingUp className="w-3.5 h-3.5 shrink-0" />
+                                                   <span className="truncate">4. طلب فتح شاغر لمسؤول التخطيط</span>
+                                                </div>
+                                                <span className="text-[8.5px] font-bold shrink-0">
+                                                   {s.isVacancyRequest ? "تم طلب شاغر ✓" : "طلب شاغر"}
+                                                </span>
+                                             </button>
+
+                                             {/* 5. ايقونة متابعة الطلب لمسؤول القيادة للمتابعة */}
+                                             <button
+                                                type="button"
+                                                onClick={() => handleSendToLeadership(s)}
+                                                className={`w-full py-2 px-2.5 rounded-xl font-black text-[10px] flex items-center justify-between transition-all shadow-xs active:scale-95 cursor-pointer ${
+                                                   s.sentToLeadership
+                                                      ? "bg-[#009688]/10 text-[#009688] border border-[#009688]/20 dark:bg-teal-950/20 dark:text-teal-300 dark:border-teal-900"
+                                                      : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                                                }`}
+                                                title="متابعة الطلب لمسؤول القيادة للمتابعة"
+                                             >
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                   <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                                                   <span className="truncate">5. متابعة الطلب لمسؤول القيادة للمتابعة</span>
+                                                </div>
+                                                <span className="text-[8.5px] font-bold shrink-0">
+                                                   {s.sentToLeadership ? "مرسل للقيادة ✓" : "متابعة القيادة"}
+                                                </span>
+                                             </button>
+
+                                             {/* Finalize & Resolve Step */}
+                                             <div className="pt-1.5 border-t border-teal-200/40 dark:border-teal-800/40">
                                                 <button
                                                    type="button"
-                                                   onClick={() => handleClaimAdmissionSurvey(s)}
-                                                   className="w-full py-2 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-black text-[10px] flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-95 transition-all"
+                                                   onClick={() => {
+                                                      const isStaffed = Boolean(s.staffingConfirmedAt || s.principalConfirmedStaffing);
+                                                      if (!isStaffed) {
+                                                         setClaimToastMessage("⚠️ تنبيه نظامي: لا يمكن أرشفة المعاملة وإغلاقها إلا بعد تسكين الطالب وإضافة ملفه من قبل مدير المدرسة.");
+                                                         setTimeout(() => setClaimToastMessage(null), 5000);
+                                                         return;
+                                                      }
+                                                      const updated = { 
+                                                         ...s, 
+                                                         isResolved: true, 
+                                                         resolvedAt: new Date().toISOString() 
+                                                      };
+                                                      onUpdateSurvey(updated);
+                                                      setClaimToastMessage("تم اعتماد حل الطلب وإغلاقه بنجاح وأرشفته للمستفيد ✓");
+                                                      setTimeout(() => setClaimToastMessage(null), 4000);
+                                                   }}
+                                                   className="w-full py-1.5 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[9.5px] flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer"
                                                 >
-                                                   <UserPlus className="w-3.5 h-3.5" />
-                                                   <span>استلام المعاملة لبدء العمل</span>
+                                                   <CheckCircle2 className="w-3 h-3" />
+                                                   <span>اعتماد القبول والتسكين النهائي وإغلاق المعاملة</span>
                                                 </button>
                                              </div>
-                                          ) : (
-                                             <div className="space-y-2">
-                                                {/* Step 2: Send to School Principal for Placement */}
-                                                <div className="space-y-1">
-                                                   <div className="text-[9px] font-bold text-slate-500 text-right">أرسل لمدير المدرسة للتسكين والمتابعة:</div>
-                                                   <button
-                                                      type="button"
-                                                      onClick={() => {
-                                                         const updated = { 
-                                                            ...s, 
-                                                            sentToSchoolPrincipal: true,
-                                                            sentToPrincipalAt: new Date().toISOString()
-                                                         };
-                                                         onUpdateSurvey(updated);
-                                                         setClaimToastMessage("تم إرسال الطلب بنجاح إلى مدير المدرسة للتسكين 🏫");
-                                                         setTimeout(() => setClaimToastMessage(null), 4000);
-                                                      }}
-                                                      className={"w-full py-2 px-3 rounded-xl font-black text-[10px] flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer " + 
-                                                         (s.sentToSchoolPrincipal 
-                                                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-300 dark:border-emerald-900" 
-                                                            : "bg-[#009688] hover:bg-[#00796b] text-white"
-                                                         )}
-                                                   >
-                                                      <Building2 className="w-3.5 h-3.5" />
-                                                      <span>{s.sentToSchoolPrincipal ? "تم الإرسال لمدير المدرسة للتسكين ✓" : "ارسال لمدير المدرسة للتسكين"}</span>
-                                                   </button>
-                                                </div>
-
-                                                {/* Step 3: Refer to Planning for vacancies */}
-                                                <div className="space-y-1">
-                                                   <div className="text-[9px] font-bold text-slate-500 text-right">إرسال لمشرف التخطيط لفتح شواغر:</div>
-                                                   <button
-                                                      type="button"
-                                                      onClick={() => {
-                                                         const updated = { 
-                                                            ...s, 
-                                                            isVacancyRequest: true,
-                                                            vacancyRequestStatus: 'pending',
-                                                            referredToPlanningAt: new Date().toISOString(),
-                                                            eqReferredToPlanningAt: new Date().toISOString()
-                                                         };
-                                                         onUpdateSurvey(updated);
-                                                         setClaimToastMessage("تمت إحالة الطلب بنجاح لمشرف التخطيط لفتح الشواغر والميزانيات 🔓");
-                                                         setTimeout(() => setClaimToastMessage(null), 4000);
-                                                      }}
-                                                      className={"w-full py-2 px-3 rounded-xl font-black text-[10px] flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer " + 
-                                                         (s.isVacancyRequest 
-                                                            ? "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/20 dark:text-amber-300 dark:border-amber-900" 
-                                                            : "bg-blue-600 hover:bg-blue-700 text-white"
-                                                         )}
-                                                   >
-                                                      <TrendingUp className="w-3.5 h-3.5" />
-                                                      <span>{s.isVacancyRequest ? "تمت الإحالة لمشرف التخطيط ✓" : "إرسال لمشرف التخطيط لفتح الشواغر"}</span>
-                                                   </button>
-                                                </div>
-
-                                                {/* Step 4: Send to Leadership for follow up */}
-                                                <div className="space-y-1">
-                                                   <div className="text-[9px] font-bold text-slate-500 text-right">إرسال لمشرف القيادة لمتابعة التسكين:</div>
-                                                   <button
-                                                      type="button"
-                                                      onClick={() => {
-                                                         const updated = { 
-                                                            ...s, 
-                                                            sentToLeadership: true,
-                                                            sentToLeadershipAt: new Date().toISOString()
-                                                         };
-                                                         onUpdateSurvey(updated);
-                                                         setClaimToastMessage("تم إرسال الطلب بنجاح إلى مشرف القيادة لمتابعة التسكين لدى مدير المدرسة 👤");
-                                                         setTimeout(() => setClaimToastMessage(null), 4000);
-                                                      }}
-                                                      className={"w-full py-2 px-3 rounded-xl font-black text-[10px] flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer " + 
-                                                         (s.sentToLeadership 
-                                                            ? "bg-[#009688]/10 text-[#009688] border border-[#009688]/20 dark:bg-teal-950/20 dark:text-teal-300 dark:border-teal-900" 
-                                                            : "bg-indigo-600 hover:bg-indigo-700 text-white"
-                                                         )}
-                                                   >
-                                                      <UserCheck className="w-3.5 h-3.5" />
-                                                      <span>{s.sentToLeadership ? "تم الإرسال لمشرف القيادة للمتابعة ✓" : "ارسال لمشرف القيادة لمتابعة التسكين"}</span>
-                                                   </button>
-                                                </div>
-
-                                                {/* Step 5: Finalize & Resolve */}
-                                                <div className="space-y-1 pt-1.5 border-t border-teal-200/40">
-                                                   <div className="text-[9px] font-bold text-slate-500 text-right">الاعتماد النهائي وإغلاق المعاملة:</div>
-                                                   <button
-                                                      type="button"
-                                                      onClick={() => {
-                                                         const isStaffed = Boolean(s.staffingConfirmedAt || s.principalConfirmedStaffing);
-                                                         if (!isStaffed) {
-                                                            setClaimToastMessage("⚠️ تنبيه نظامي: لا يمكن أرشفة المعاملة وإغلاقها إلا بعد تسكين الطالب من قبل مدير المدرسة.");
-                                                            setTimeout(() => setClaimToastMessage(null), 5000);
-                                                            return;
-                                                         }
-                                                         const updated = { 
-                                                            ...s, 
-                                                            isResolved: true,
-                                                            resolvedAt: new Date().toISOString()
-                                                         };
-                                                         onUpdateSurvey(updated);
-                                                         setClaimToastMessage("تم اعتماد حل الطلب وإغلاقه بنجاح وأرشفته للمستفيد ✓");
-                                                         setTimeout(() => setClaimToastMessage(null), 4000);
-                                                      }}
-                                                      className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer"
-                                                   >
-                                                      <CheckCircle2 className="w-3.5 h-3.5" />
-                                                      <span>اعتماد القبول والتسكين النهائي وإغلاق المعاملة</span>
-                                                   </button>
-                                                </div>
-                                             </div>
-                                          )}
+                                          </div>
                                        </div>
                                        
                                        {/* Reassignment / Assignment Modal Link */}
@@ -2660,6 +2758,16 @@ export default function Dashboard({
                                   {/* Column 8: الإجراءات */}
                                   <td className="p-3 text-center">
                                      <div className="flex items-center justify-center gap-1.5">
+                                        {/* Review & Assign School button */}
+                                        <button
+                                           type="button"
+                                           onClick={() => setReviewRegistrationSurvey(s)}
+                                           className="p-2 text-purple-600 hover:text-purple-800 bg-purple-50 dark:bg-purple-950/20 hover:bg-purple-100 rounded-xl transition-all cursor-pointer"
+                                           title="استعراض الطلب وتحديد مدرسة التسجيل"
+                                        >
+                                           <Eye className="w-4 h-4" />
+                                        </button>
+
                                         {/* Comment icon */}
                                         <button
                                            type="button"
@@ -2939,136 +3047,178 @@ export default function Dashboard({
                     {/* 1. PLANNING WORKSPACE */}
                     {resolvedSubTab === 'planning' && (
                        <div className="space-y-4">
-                          <div className="p-4 bg-amber-500/10 rounded-2xl border border-amber-500/20 text-xs font-bold text-amber-700 dark:text-amber-300 mb-2">
-                             📌 شاشة التخطيط لفتح شواغر الفصول (خاص بمسؤول التخطيط): تُدرج هنا المعاملات التي تتطلب تأمين شاغر بالرغبات المدخلة من قبل المستفيد.
+                          <div className="p-4 bg-teal-500/10 rounded-2xl border border-teal-500/20 text-xs sm:text-sm font-bold text-teal-800 dark:text-teal-200 mb-2 flex items-center gap-2.5">
+                             <Building2 className="w-5 h-5 text-teal-600 shrink-0" />
+                             <span>📌 شاشة التخطيط المدرسي لدراسة واعتماد الشواغر: تُعرض هنا المدارس المحددة من قِبل مسؤولي القبول والتسجيل لدراسة إمكانية الفصول واعتماد فتح الشاغر مباشرة للمدرسة المعنية.</span>
                           </div>
 
                           {planningRequests.length > 0 ? (
                              planningRequests.map(s => {
-                                // Fallbacks for wishes if undefined
-                                const wish1 = s.firstSchoolName || s.schoolName || 'الرغبة الأولى';
-                                const wish2 = s.secondSchoolName || 'لم يتم اختيار رغبة ثانية';
-                                const wish3 = s.thirdSchoolName || 'لم يتم اختيار رغبة ثالثة';
-
-                                // Selected desire from state (default to wish1)
-                                const selectedDesire = selectedWishForSurvey[s.id] || wish1;
+                                const assignedSchool = s.assignedRegistrationSchool || s.schoolName || s.firstSchoolName || 'لم تحدد المدرسة بعد';
+                                const assignedCode = s.assignedRegistrationSchoolCode || s.schoolCode || '';
+                                const supervisorName = s.assignedBySupervisorName || s.serviceEmployee || 'مشرف القبول والتسجيل';
+                                const supervisorNotes = s.assignedRegistrationSchoolNotes;
+                                const assignedDate = s.assignedRegistrationSchoolAt || s.referredToPlanningAt;
 
                                 return (
-                                   <div key={s.id} className="p-5 rounded-2xl border border-slate-200 dark:border-teal-800/30 bg-slate-50/50 dark:bg-slate-900/30 space-y-4 transition-all hover:border-teal-500/40">
+                                   <div key={s.id} className="p-6 rounded-3xl border-2 border-slate-200 dark:border-teal-800/40 bg-slate-50/60 dark:bg-slate-900/40 space-y-5 transition-all hover:border-teal-500/50 shadow-xs">
                                       {/* Return reason alert banner if returned by principal */}
                                       {(s.returnedByPrincipal || s.vacancyRequestStatus === 'returned_no_vacancy' || s.principalReturnReason) && (
-                                         <div className="p-3.5 bg-rose-500/15 border-2 border-rose-500/40 rounded-2xl space-y-1.5 text-rose-900 dark:text-rose-100">
-                                            <div className="flex items-center gap-2 font-black text-xs text-rose-700 dark:text-rose-300">
-                                               <AlertTriangle className="w-4 h-4 text-rose-600 animate-bounce shrink-0" />
+                                         <div className="p-4 bg-rose-500/15 border-2 border-rose-500/40 rounded-2xl space-y-2 text-rose-900 dark:text-rose-100">
+                                            <div className="flex items-center gap-2 font-black text-sm text-rose-700 dark:text-rose-300">
+                                               <AlertTriangle className="w-5 h-5 text-rose-600 animate-bounce shrink-0" />
                                                <span>🚨 أعيد الطلب من مدير المدرسة ({s.schoolName || s.firstSchoolName || 'المدرسة'}) لعدم توفر شاغر:</span>
                                             </div>
-                                            <div className="text-xs font-bold bg-white/90 dark:bg-slate-900/90 p-2.5 rounded-xl border border-rose-200 dark:border-rose-900/60 leading-relaxed text-slate-800 dark:text-white">
+                                            <div className="text-sm font-bold bg-white/90 dark:bg-slate-900/90 p-3 rounded-xl border border-rose-200 dark:border-rose-900/60 leading-relaxed text-slate-800 dark:text-white">
                                                📌 سبب الإعادة المكتوب من مدير المدرسة: "{s.principalReturnReason || s.unresolvedReason || 'تعذر التسكين لعدم توفر شاغر بالمرحلة/الصف'}"
                                             </div>
                                             {s.returnedAt && (
-                                               <div className="text-[10px] text-slate-500 text-left font-mono">
+                                               <div className="text-xs text-slate-500 text-left font-mono">
                                                   تاريخ الإعادة لمشرف التخطيط: {new Date(s.returnedAt).toLocaleString('ar-SA')}
                                                </div>
                                             )}
                                          </div>
                                       )}
 
-                                      {/* Student details header */}
-                                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-teal-800/10 pb-3">
+                                      {/* Student Details Header */}
+                                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-teal-800/20 pb-4">
                                          <div>
-                                            <div className="font-black text-sm text-slate-900 dark:text-white">{s.beneficiaryName}</div>
-                                            <div className="text-[10px] text-slate-500 mt-1 flex flex-wrap gap-x-4">
-                                               <span>المرحلة الدراسية: <strong className="text-teal-600">{s.stage} ({s.grade || '---'})</strong></span>
-                                               <span>الجنس: <strong className="text-teal-600">{s.gender === 'boys' ? 'بنين' : s.gender === 'girls' ? 'بنات' : 'غير محدد'}</strong></span>
-                                               <span>الحي: <strong className="text-teal-600">{s.neighborhood || '---'}</strong></span>
+                                            <div className="flex items-center gap-3">
+                                               <span className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">
+                                                  {s.beneficiaryName}
+                                               </span>
+                                               <span className="text-xs sm:text-sm font-mono font-black px-2.5 py-1 bg-teal-100/80 dark:bg-teal-950 text-teal-800 dark:text-teal-300 rounded-lg">
+                                                  طلب #{s.id}
+                                               </span>
+                                            </div>
+                                            <div className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 mt-1">
+                                               تاريخ تقديم الطلب: {new Date(s.submittedAt || s.createdAt).toLocaleDateString('ar-SA')}
                                             </div>
                                          </div>
-                                         <div className="text-[10px] px-2.5 py-1 bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 rounded-lg font-black">
-                                            بانتظار الموافقة على الشاغر
+                                         <div className="text-xs sm:text-sm px-3.5 py-1.5 bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 rounded-xl font-black flex items-center gap-2">
+                                            <Clock className="w-4 h-4 text-amber-600" />
+                                            <span>بانتظار اعتماد فتح الشاغر من التخطيط</span>
                                          </div>
                                       </div>
 
-                                      {/* School Choices Selection (The three beneficiary desires) */}
-                                      <div>
-                                         <label className="block text-xs font-black text-slate-700 dark:text-slate-300 mb-2">
-                                            حدد المدرسة التي سيتم اعتماد فتح الشاغر بها (الرغبات الثلاث من المستفيد):
-                                         </label>
-                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                            
-                                            {/* Choice 1 */}
-                                            <button
-                                               type="button"
-                                               onClick={() => setSelectedWishForSurvey({ ...selectedWishForSurvey, [s.id]: wish1 })}
-                                               className={`p-3 rounded-xl border text-right transition-all flex flex-col justify-between h-20 cursor-pointer ${selectedDesire === wish1 ? 'border-teal-500 bg-teal-50/30 dark:bg-teal-950/20 ring-2 ring-teal-500/20' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50'}`}
-                                            >
-                                               <span className="text-[10px] font-bold text-teal-600 dark:text-teal-400">الرغبة الأولى (الأساسية)</span>
-                                               <span className="text-xs font-black text-slate-800 dark:text-white truncate w-full">{wish1}</span>
-                                            </button>
+                                      {/* Request Data Grid - Clear, medium, larger font */}
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 p-4 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-teal-900/30">
+                                         <div>
+                                            <span className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 block mb-0.5">الهوية الوطنية / الإقامة:</span>
+                                            <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white font-mono">{s.nationalId || '---'}</span>
+                                         </div>
+                                         <div>
+                                            <span className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 block mb-0.5">رقم جوال ولي الأمر:</span>
+                                            <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white font-mono dir-ltr text-right">{s.phoneNumber || '---'}</span>
+                                         </div>
+                                         <div>
+                                            <span className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 block mb-0.5">المرحلة والصف الدراسي:</span>
+                                            <span className="text-sm sm:text-base font-black text-teal-700 dark:text-teal-300">{s.stage} ({s.grade || 'غير محدد'})</span>
+                                         </div>
+                                         <div>
+                                            <span className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 block mb-0.5">الجنس / نوع التعليم:</span>
+                                            <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white">{s.gender === 'boys' ? 'بنين' : s.gender === 'girls' ? 'بنات' : 'غير محدد'}</span>
+                                         </div>
+                                         <div>
+                                            <span className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 block mb-0.5">الحي السكني:</span>
+                                            <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white">{s.neighborhood || 'غير محدد'}</span>
+                                         </div>
+                                         <div>
+                                            <span className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 block mb-0.5">نوع الطلب / الإشكالية:</span>
+                                            <span className="text-sm sm:text-base font-black text-amber-700 dark:text-amber-300">{s.problemType}</span>
+                                         </div>
+                                      </div>
 
-                                            {/* Choice 2 */}
-                                            <button
-                                               type="button"
-                                               disabled={wish2 === 'لم يتم اختيار رغبة ثانية'}
-                                               onClick={() => setSelectedWishForSurvey({ ...selectedWishForSurvey, [s.id]: wish2 })}
-                                               className={`p-3 rounded-xl border text-right transition-all flex flex-col justify-between h-20 ${wish2 === 'لم يتم اختيار رغبة ثانية' ? 'opacity-40 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : 'cursor-pointer'} ${selectedDesire === wish2 ? 'border-amber-500 bg-amber-50/30 dark:bg-amber-950/20 ring-2 ring-amber-500/20' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50'}`}
-                                            >
-                                               <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">الرغبة الثانية (البديلة)</span>
-                                               <span className="text-xs font-black text-slate-800 dark:text-white truncate w-full">{wish2}</span>
-                                            </button>
+                                      {/* Beneficiary Details if present */}
+                                      {(s.otherProblemDetails || s.notes) && (
+                                         <div className="p-4 rounded-xl bg-slate-100/90 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                                            <span className="text-xs sm:text-sm font-black text-slate-600 dark:text-slate-300 block mb-1">📝 شرح وتفاصيل الطلب من المستفيد:</span>
+                                            <p className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 leading-relaxed">{s.otherProblemDetails || s.notes}</p>
+                                         </div>
+                                      )}
 
-                                            {/* Choice 3 */}
-                                            <button
-                                               type="button"
-                                               disabled={wish3 === 'لم يتم اختيار رغبة ثالثة'}
-                                               onClick={() => setSelectedWishForSurvey({ ...selectedWishForSurvey, [s.id]: wish3 })}
-                                               className={`p-3 rounded-xl border text-right transition-all flex flex-col justify-between h-20 ${wish3 === 'لم يتم اختيار رغبة ثالثة' ? 'opacity-40 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : 'cursor-pointer'} ${selectedDesire === wish3 ? 'border-amber-500 bg-amber-50/30 dark:bg-amber-950/20 ring-2 ring-amber-500/20' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50'}`}
-                                            >
-                                               <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">الرغبة الثالثة (البديلة)</span>
-                                               <span className="text-xs font-black text-slate-800 dark:text-white truncate w-full">{wish3}</span>
-                                            </button>
-
+                                      {/* The School Specified ONLY by Admission Supervisor */}
+                                      <div className="p-5 rounded-2xl border-2 border-teal-500/40 bg-teal-50/50 dark:bg-teal-950/30 space-y-3.5">
+                                         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-teal-200/80 dark:border-teal-800/40 pb-2.5">
+                                            <div className="flex items-center gap-2">
+                                               <Building2 className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+                                               <span className="text-sm sm:text-base font-black text-teal-950 dark:text-teal-200">
+                                                  المدرسة المحددة للتسكين من قِبل مسؤول القبول والتسجيل:
+                                               </span>
+                                            </div>
+                                            {assignedDate && (
+                                               <span className="text-xs sm:text-sm font-bold text-teal-700 dark:text-teal-400 font-mono">
+                                                  تاريخ التحديد: {new Date(assignedDate).toLocaleString('ar-SA')}
+                                               </span>
+                                            )}
                                          </div>
 
-                                         {selectedDesire !== wish1 && (
-                                            <div className="mt-2 text-[10px] text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1.5">
-                                               <span>⚠️ ملاحظة: تم تفعيل التسكين على مدرسة الرغبة البديلة المحددة لتعذر الشاغر في الرغبة الأولى.</span>
+                                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                            <div className="space-y-1.5">
+                                               <div className="text-base sm:text-lg font-black text-teal-900 dark:text-teal-100 flex flex-wrap items-center gap-2.5">
+                                                  <span className="bg-teal-600 text-white p-2 rounded-xl">
+                                                     <School className="w-5 h-5" />
+                                                  </span>
+                                                  <span className="text-lg sm:text-xl font-black">{assignedSchool}</span>
+                                                  {assignedCode && (
+                                                     <span className="text-xs sm:text-sm font-mono px-2.5 py-1 bg-teal-200/80 dark:bg-teal-900 text-teal-900 dark:text-teal-200 rounded-lg font-bold">
+                                                        كود المدرسة: {assignedCode}
+                                                     </span>
+                                                  )}
+                                               </div>
+                                               <div className="text-xs sm:text-sm font-bold text-teal-800 dark:text-teal-300">
+                                                  مشرف القبول والتسجيل المحدد: <strong className="text-slate-900 dark:text-white">{supervisorName}</strong>
+                                               </div>
+                                            </div>
+
+                                            {/* ايقونة وزر اعتماد فتح الشاغر */}
+                                            <button
+                                               type="button"
+                                               onClick={() => {
+                                                  const finalSchool = assignedSchool;
+                                                  const updated: SurveyResponse = {
+                                                     ...s,
+                                                     schoolName: finalSchool,
+                                                     assignedRegistrationSchool: finalSchool,
+                                                     assignedRegistrationSchoolCode: assignedCode || s.schoolCode,
+                                                     vacancyRequestStatus: 'vacancy_opened',
+                                                     sentToSchoolPrincipal: true,
+                                                     sentToPrincipalAt: new Date().toISOString(),
+                                                     vacancyApprovedAt: new Date().toISOString(),
+                                                     ...(s.returnedByPrincipal ? { planningReResolvedAt: new Date().toISOString() } : {}),
+                                                     isVacancyRequest: false,
+                                                     returnedByPrincipal: false,
+                                                     vacancyRequestNotes: `تم اعتماد فتح شاغر وتوطين الطالب في المدرسة: ${finalSchool} بواسطة مشرف التخطيط (${activeOfficer.nameAr}) بتاريخ ${new Date().toLocaleDateString('ar-SA')}`
+                                                  };
+                                                  onUpdateSurvey(updated);
+                                                  setClaimToastMessage(`تم بنجاح اعتماد فتح الشاغر للمدرسة "${finalSchool}" وتوجيه الطلب لمدير المدرسة للتسكين فوراً ✓`);
+                                                  setTimeout(() => setClaimToastMessage(null), 4000);
+                                               }}
+                                               className="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm sm:text-base font-black transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2.5 cursor-pointer active:scale-95"
+                                               title="اعتماد فتح الشاغر"
+                                            >
+                                               <Unlock className="w-5 h-5 shrink-0" />
+                                               <span>{s.returnedByPrincipal ? 'معالجة السبب وإعادة تحويل الطلب لمدير المدرسة للتسكين' : 'اعتماد فتح الشاغر'}</span>
+                                            </button>
+                                         </div>
+
+                                         {supervisorNotes && (
+                                            <div className="p-3 bg-white/95 dark:bg-slate-900/90 rounded-xl border border-teal-200 dark:border-teal-800 text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
+                                               <span className="text-teal-800 dark:text-teal-300 font-black">💡 توجيه وملاحظات مشرف القبول والتسجيل: </span>
+                                               <span>{supervisorNotes}</span>
                                             </div>
                                          )}
                                       </div>
 
-                                      {/* Action buttons */}
-                                      <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 dark:border-teal-800/10">
+                                      {/* Additional Details Preview Button */}
+                                      <div className="flex justify-end pt-2 border-t border-slate-200 dark:border-teal-800/10">
                                          <button
                                             type="button"
                                             onClick={() => setSelectedSurvey(s)}
-                                            className="px-3.5 py-1.5 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                                            className="px-4 py-2 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs sm:text-sm font-bold transition-all hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer flex items-center gap-1.5"
                                          >
-                                            معاينة تفاصيل المستفيد كاملة
-                                         </button>
-                                         <button
-                                            type="button"
-                                            onClick={() => {
-                                               const finalSchool = selectedDesire;
-                                               const updated = {
-                                                  ...s,
-                                                  schoolName: finalSchool,
-                                                  vacancyRequestStatus: 'vacancy_opened',
-                                                  sentToSchoolPrincipal: true,
-                                                  sentToPrincipalAt: new Date().toISOString(),
-                                                  vacancyApprovedAt: new Date().toISOString(),
-                                                  ...(s.returnedByPrincipal ? { planningReResolvedAt: new Date().toISOString() } : {}),
-                                                  isVacancyRequest: false,
-                                                  returnedByPrincipal: false,
-                                                  vacancyRequestNotes: `تم اعتماد فتح شاغر وتوطين الطالب في المدرسة: ${finalSchool} بواسطة التخطيط (${activeOfficer.nameAr}) بتاريخ ${new Date().toLocaleDateString('ar-SA')}`
-                                               };
-                                               onUpdateSurvey(updated);
-                                               setClaimToastMessage(`تم بنجاح اعتماد الشاغر للمدرسة "${finalSchool}" وتوجيه الطلب للمدير فوراً ✓`);
-                                               setTimeout(() => setClaimToastMessage(null), 4000);
-                                            }}
-                                            className="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black transition-all shadow-xs flex items-center gap-2 cursor-pointer active:scale-95"
-                                         >
-                                            <Check className="w-4 h-4" />
-                                            <span>{s.returnedByPrincipal ? 'معالجة السبب وإعادة تحويل الطلب لمدير المدرسة للتسكين' : 'تم اعتماد فتح الشاغر وإرساله للمدرسة فوراً'}</span>
+                                            <Eye className="w-4 h-4" />
+                                            <span>معاينة تفاصيل المستفيد والطلب كاملة</span>
                                          </button>
                                       </div>
                                    </div>
@@ -3697,6 +3847,222 @@ export default function Dashboard({
                      </button>
                   </div>
                </div>
+
+               {/* المؤشرات الإحصائية العامة للتقرير الإحصائي العام الشامل - مقسم إلى أجزاء المحافظات */}
+               <div className="mt-8 pt-6 border-t border-slate-100 dark:border-teal-900/30 space-y-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                     <div className="flex items-center gap-2.5">
+                        <div className="w-10 h-10 rounded-xl bg-teal-50 dark:bg-teal-900/30 flex items-center justify-center text-[#006C70] dark:text-teal-300">
+                           <BarChart3 className="w-5 h-5" />
+                        </div>
+                        <div>
+                           <h3 className="text-sm sm:text-base font-black text-slate-800 dark:text-white">
+                              التقرير الإحصائي العام الشامل (مقسم حسب المحافظات والقطاعات)
+                           </h3>
+                           <p className="text-xs text-slate-500 dark:text-slate-400 font-bold">
+                              يشمل جميع الأيقونات الـ 13 المعتمدة مقسمة لكل محافظة: المدينة المنورة، الحناكية، خيبر، بدر، وادي الفرع، المهد، ينبع، العلا
+                           </p>
+                        </div>
+                     </div>
+                     <button
+                        onClick={handleOpenGeneralReport}
+                        className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-2 cursor-pointer shadow-sm transition-all"
+                     >
+                        <Printer className="w-4 h-4" />
+                        معاينة وتصدير التقرير الشامل (PDF/Word/Excel)
+                     </button>
+                  </div>
+
+                  {/* أزرار التبديل والفلترة بين أجزاء المحافظات */}
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 bg-slate-100 dark:bg-slate-900/80 p-2 rounded-2xl border border-slate-200/80 dark:border-teal-900/40">
+                     <button
+                        type="button"
+                        onClick={() => setSelectedReportsGovPart('all')}
+                        className={`px-3 py-1.5 text-xs font-black rounded-xl transition-all cursor-pointer ${
+                           selectedReportsGovPart === 'all'
+                              ? 'bg-[#006C70] text-white shadow-xs'
+                              : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800'
+                        }`}
+                     >
+                        عرض جميع المحافظات (8)
+                     </button>
+                     {governorateStatsList.map(g => (
+                        <button
+                           key={g.id}
+                           type="button"
+                           onClick={() => setSelectedReportsGovPart(g.id)}
+                           className={`px-2.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                              selectedReportsGovPart === g.id
+                                 ? 'bg-[#006C70] text-white shadow-xs'
+                                 : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800'
+                           }`}
+                        >
+                           {g.name}
+                        </button>
+                     ))}
+                  </div>
+
+                  {/* مؤشرات الإجمالي العام (تظهر عند اختيار الكل) */}
+                  {selectedReportsGovPart === 'all' && (
+                     <div className="bg-gradient-to-r from-teal-900/5 via-slate-50 to-teal-900/5 dark:from-teal-950/20 dark:via-slate-900 dark:to-teal-950/20 p-4 sm:p-5 rounded-2xl border border-teal-800/20 dark:border-teal-900/40 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-teal-800/10 dark:border-teal-900/30">
+                           <div className="text-xs font-black text-[#006C70] dark:text-teal-300 flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full bg-[#006C70] dark:bg-teal-400"></span>
+                              <span>المؤشرات الإجمالية العامة للمنطقة ككل (13 أيقونة معتمدة)</span>
+                           </div>
+                           <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                              مجموع كافة المحافظات والمكاتب التابعة للإدارة
+                           </span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5">
+                           {/* 1. إجمالي المعاملات المسجلة */}
+                           <div onClick={handleOpenGeneralReport} className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 flex flex-col justify-between hover:border-teal-500/50 transition-all cursor-pointer group shadow-2xs">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                 <div className="p-1 rounded-md bg-blue-50 dark:bg-blue-950/50 text-blue-600 group-hover:scale-110 transition-transform">
+                                    <Layers className="w-3.5 h-3.5" />
+                                 </div>
+                                 <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 leading-tight">إجمالي المعاملات</span>
+                              </div>
+                              <div className="text-base font-black text-slate-900 dark:text-white">{surveys.length}</div>
+                           </div>
+                           {/* 2. المعاملات المنجزة والمغلقة */}
+                           <div onClick={handleOpenGeneralReport} className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 flex flex-col justify-between hover:border-teal-500/50 transition-all cursor-pointer group shadow-2xs">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                 <div className="p-1 rounded-md bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 group-hover:scale-110 transition-transform">
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                 </div>
+                                 <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 leading-tight">المعاملات المنجزة</span>
+                              </div>
+                              <div className="text-base font-black text-emerald-600 dark:text-emerald-400">{surveys.filter(s => s.isResolved).length}</div>
+                           </div>
+                           {/* 3. المعاملات الجارية وقيد المعالجة */}
+                           <div onClick={handleOpenGeneralReport} className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 flex flex-col justify-between hover:border-teal-500/50 transition-all cursor-pointer group shadow-2xs">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                 <div className="p-1 rounded-md bg-amber-50 dark:bg-amber-950/50 text-amber-600 group-hover:scale-110 transition-transform">
+                                    <Clock className="w-3.5 h-3.5" />
+                                 </div>
+                                 <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 leading-tight">المعاملات الجارية</span>
+                              </div>
+                              <div className="text-base font-black text-amber-600 dark:text-amber-400">{surveys.filter(s => !s.isResolved).length}</div>
+                           </div>
+                           {/* 4. نسبة إنجاز المعاملات */}
+                           <div onClick={handleOpenGeneralReport} className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 flex flex-col justify-between hover:border-teal-500/50 transition-all cursor-pointer group shadow-2xs">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                 <div className="p-1 rounded-md bg-teal-50 dark:bg-teal-950/50 text-[#006C70] dark:text-teal-400 group-hover:scale-110 transition-transform">
+                                    <Percent className="w-3.5 h-3.5" />
+                                 </div>
+                                 <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 leading-tight">نسبة الإنجاز</span>
+                              </div>
+                              <div className="text-base font-black text-[#006C70] dark:text-teal-400">{stats.resRate}%</div>
+                           </div>
+                           {/* 5. معدل رضا المستفيدين */}
+                           <div onClick={handleOpenGeneralReport} className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 flex flex-col justify-between hover:border-teal-500/50 transition-all cursor-pointer group shadow-2xs">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                 <div className="p-1 rounded-md bg-amber-50 dark:bg-amber-950/50 text-amber-500 group-hover:scale-110 transition-transform">
+                                    <Star className="w-3.5 h-3.5" />
+                                 </div>
+                                 <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 leading-tight">معدل الرضا</span>
+                              </div>
+                              <div className="text-base font-black text-amber-500">{stats.avgSat} / 5</div>
+                           </div>
+                           {/* 6. بلاغات المدارس الميدانية */}
+                           <div onClick={handleOpenGeneralReport} className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 flex flex-col justify-between hover:border-teal-500/50 transition-all cursor-pointer group shadow-2xs">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                 <div className="p-1 rounded-md bg-rose-50 dark:bg-rose-950/50 text-rose-600 group-hover:scale-110 transition-transform">
+                                    <AlertTriangle className="w-3.5 h-3.5" />
+                                 </div>
+                                 <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 leading-tight">بلاغات المدارس</span>
+                              </div>
+                              <div className="text-base font-black text-rose-600 dark:text-rose-400">{principalReports.length}</div>
+                           </div>
+                           {/* 7. معاملات المرحلة الثانوية */}
+                           <div onClick={handleOpenGeneralReport} className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 flex flex-col justify-between hover:border-teal-500/50 transition-all cursor-pointer group shadow-2xs">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                 <div className="p-1 rounded-md bg-purple-50 dark:bg-purple-950/50 text-purple-600 group-hover:scale-110 transition-transform">
+                                    <GraduationCap className="w-3.5 h-3.5" />
+                                 </div>
+                                 <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 leading-tight">المرحلة الثانوية</span>
+                              </div>
+                              <div className="text-base font-black text-purple-600 dark:text-purple-400">{stageStats.secAdmission}</div>
+                           </div>
+                           {/* 8. معاملات المرحلة المتوسطة */}
+                           <div onClick={handleOpenGeneralReport} className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 flex flex-col justify-between hover:border-teal-500/50 transition-all cursor-pointer group shadow-2xs">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                 <div className="p-1 rounded-md bg-sky-50 dark:bg-sky-950/50 text-sky-600 group-hover:scale-110 transition-transform">
+                                    <School className="w-3.5 h-3.5" />
+                                 </div>
+                                 <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 leading-tight">المرحلة المتوسطة</span>
+                              </div>
+                              <div className="text-base font-black text-sky-600 dark:text-sky-400">{stageStats.interAdmission}</div>
+                           </div>
+                           {/* 9. معاملات المرحلة الابتدائية */}
+                           <div onClick={handleOpenGeneralReport} className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 flex flex-col justify-between hover:border-teal-500/50 transition-all cursor-pointer group shadow-2xs">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                 <div className="p-1 rounded-md bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 group-hover:scale-110 transition-transform">
+                                    <BookOpen className="w-3.5 h-3.5" />
+                                 </div>
+                                 <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 leading-tight">المرحلة الابتدائية</span>
+                              </div>
+                              <div className="text-base font-black text-emerald-600 dark:text-emerald-400">{stageStats.primAdmission}</div>
+                           </div>
+                           {/* 10. معاملات مرحلة الطفولة المبكرة */}
+                           <div onClick={handleOpenGeneralReport} className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 flex flex-col justify-between hover:border-teal-500/50 transition-all cursor-pointer group shadow-2xs">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                 <div className="p-1 rounded-md bg-pink-50 dark:bg-pink-950/50 text-pink-500 group-hover:scale-110 transition-transform">
+                                    <Baby className="w-3.5 h-3.5" />
+                                 </div>
+                                 <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 leading-tight">الطفولة المبكرة</span>
+                              </div>
+                              <div className="text-base font-black text-pink-500">{stageStats.earlyChildhoodAdmission}</div>
+                           </div>
+                           {/* 11. معاملات معادلات المرحلة الثانوية */}
+                           <div onClick={handleOpenGeneralReport} className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 flex flex-col justify-between hover:border-teal-500/50 transition-all cursor-pointer group shadow-2xs">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                 <div className="p-1 rounded-md bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 group-hover:scale-110 transition-transform">
+                                    <Award className="w-3.5 h-3.5" />
+                                 </div>
+                                 <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 leading-tight">معادلات الثانوية</span>
+                              </div>
+                              <div className="text-base font-black text-indigo-600 dark:text-indigo-400">{stageStats.secEq}</div>
+                           </div>
+                           {/* 12. معاملات معادلات المرحلة المتوسطة */}
+                           <div onClick={handleOpenGeneralReport} className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 flex flex-col justify-between hover:border-teal-500/50 transition-all cursor-pointer group shadow-2xs">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                 <div className="p-1 rounded-md bg-cyan-50 dark:bg-cyan-950/50 text-cyan-600 group-hover:scale-110 transition-transform">
+                                    <FileText className="w-3.5 h-3.5" />
+                                 </div>
+                                 <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 leading-tight">معادلات المتوسطة</span>
+                              </div>
+                              <div className="text-base font-black text-cyan-600 dark:text-cyan-400">{stageStats.interEq}</div>
+                           </div>
+                           {/* 13. معاملات معادلات المرحلة الابتدائية */}
+                           <div onClick={handleOpenGeneralReport} className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 flex flex-col justify-between hover:border-teal-500/50 transition-all cursor-pointer group shadow-2xs">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                 <div className="p-1 rounded-md bg-teal-50 dark:bg-teal-950/50 text-teal-600 group-hover:scale-110 transition-transform">
+                                    <FileBadge className="w-3.5 h-3.5" />
+                                 </div>
+                                 <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 leading-tight">معادلات الابتدائية</span>
+                              </div>
+                              <div className="text-base font-black text-teal-600 dark:text-teal-400">{stageStats.primEq}</div>
+                           </div>
+                        </div>
+                     </div>
+                  )}
+
+                  {/* قائمة أجزاء المحافظات (تشمل جميع الأيقونات الـ 13 لكل جزء) */}
+                  <div className="space-y-4">
+                     {governorateStatsList
+                        .filter(g => selectedReportsGovPart === 'all' || g.id === selectedReportsGovPart)
+                        .map(g => (
+                           <GovernoratePartCard 
+                              key={g.id} 
+                              data={g} 
+                              onOpenReport={handleOpenGeneralReport}
+                              isDark={isDark}
+                           />
+                        ))}
+                  </div>
+               </div>
             </div>
           </div>
         )}
@@ -4167,6 +4533,26 @@ export default function Dashboard({
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL 9: Registration Review & School Assignment Modal */}
+      {reviewRegistrationSurvey && (
+        <RegistrationReviewModal
+          isOpen={Boolean(reviewRegistrationSurvey)}
+          onClose={() => setReviewRegistrationSurvey(null)}
+          survey={reviewRegistrationSurvey}
+          schools={schools}
+          onUpdateSurvey={(updated) => {
+            onUpdateSurvey(updated);
+            setReviewRegistrationSurvey(updated);
+          }}
+          activeOfficer={activeOfficer}
+          onClaimSurvey={handleClaimAdmissionSurvey}
+          onSendToPrincipal={handleSendToPrincipalForStudentFile}
+          onSendToPlanning={handleSendToPlanning}
+          onSendToLeadership={handleSendToLeadership}
+          isDark={isDark}
+        />
       )}
 
       {/* Claim / Action Toast Notification */}

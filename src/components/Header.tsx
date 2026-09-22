@@ -97,8 +97,8 @@ export default function Header({
               <img
                 src="https://upload.wikimedia.org/wikipedia/commons/7/76/Ministry_of_Education_%28Saudi_Arabia%29_%28logo%29.png"
                 alt="Ministry of Education Logo"
-                className="h-10 sm:h-12 w-auto object-contain transition-all duration-300 hover:scale-[1.02] filter brightness-110 drop-shadow-sm"
                 referrerPolicy="no-referrer"
+                className="h-10 sm:h-12 w-auto object-contain transition-all duration-300 hover:scale-[1.02] filter brightness-110 drop-shadow-sm"
               />
             </div>
           </div>
