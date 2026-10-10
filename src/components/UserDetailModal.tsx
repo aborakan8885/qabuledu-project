@@ -18,6 +18,7 @@ export default function UserDetailModal({
   isAdmin: boolean,
   isDark?: boolean 
 }) {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formData, setFormData] = useState<OfficerUser>({ 
     ...officer,
     permissions: officer.permissions || {} 
@@ -262,30 +263,54 @@ export default function UserDetailModal({
 
           {/* Action Buttons: Save & Delete */}
           {isAdmin && (
-            <div className="flex items-center gap-3 pt-3 border-t border-slate-100 dark:border-teal-800/30">
-              <button 
-                type="submit" 
-                className="flex-1 py-3 px-5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-98"
-              >
-                <Save className="w-4 h-4" />
-                <span>حفظ التعديلات والصلاحيات</span>
-              </button>
-              
-              {onDelete && (
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    if (confirm(`هل أنت متأكد من حذف الموظف (${formData.nameAr}) نهائياً من النظام؟`)) {
-                      onDelete(officer.id);
-                      onClose();
-                    }
-                  }}
-                  className="py-3 px-5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 rounded-xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer active:scale-98"
-                  title="حذف هذا المستخدم"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span>حذف المستخدم</span>
-                </button>
+            <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-teal-800/30">
+              {showDeleteConfirm ? (
+                <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex flex-wrap items-center justify-between gap-3 animate-fadeIn">
+                  <div className="text-xs font-black text-rose-800 dark:text-rose-300">
+                    ⚠️ تأكيد نهائي: هل أنت متأكد من حذف حساب ({formData.nameAr}) نهائياً؟
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onDelete?.(officer.id);
+                        onClose();
+                      }}
+                      className="py-2 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-xs transition-all cursor-pointer shadow-sm active:scale-95"
+                    >
+                      نعم، احذف نهائياً
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteConfirm(false)}
+                      className="py-2 px-3.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-black text-xs transition-all cursor-pointer"
+                    >
+                      إلغاء
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <button 
+                    type="submit" 
+                    className="flex-1 py-3 px-5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-98"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>حفظ التعديلات والصلاحيات</span>
+                  </button>
+                  
+                  {onDelete && (
+                    <button 
+                      type="button" 
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="py-3 px-5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 rounded-xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer active:scale-98"
+                      title="حذف هذا المستخدم"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>حذف المستخدم</span>
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}

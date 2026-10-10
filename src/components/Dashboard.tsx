@@ -284,18 +284,37 @@ export default function Dashboard({
       return !forbiddenForDirector.includes(feature);
     }
 
-    // 3. مشرف وحدة القبول: طلبات القبول والتسجيل والنقل - الاستفسارات والتواصل - متابعة ومعالجة بلاغات المدارس - ملاحظات ورسائل المستفيدين - سجل التنبيهات الفورية - قياس رضا المستفيدين
+    // 3. مدير وحدة القبول
+    if (activeOfficer.role === 'manager_admission_unit') {
+      return ['requests', 'equivalency_requests', 'inquiries', 'principal_reports', 'feedback', 'alerts', 'satisfaction', 'schools'].includes(feature);
+    }
+
+    // 4. مشرف وحدة القبول (القبول والتسجيل)
     if (activeOfficer.role === 'supervisor') {
       return ['requests', 'inquiries', 'principal_reports', 'feedback', 'alerts', 'satisfaction'].includes(feature);
     }
 
-    // 4. مشرف وحدة القبول معادلة المؤهلات: طلبات معادلة المؤهلات والشهادات - الاستفسارات والتواصل - ملاحظات ورسائل المستفيدين - سجل التنبيهات الفورية - قياس رضا المستفيدين
+    // 5. مشرف القبول دعم فني
+    if (activeOfficer.role === 'tech_support_supervisor') {
+      return ['inquiries', 'requests', 'feedback', 'alerts'].includes(feature);
+    }
+
+    // 6. مشرف وحدة القبول معادلة المؤهلات
     if (activeOfficer.role === 'equivalency_supervisor') {
       return ['equivalency_requests', 'inquiries', 'feedback', 'alerts', 'satisfaction'].includes(feature);
     }
 
-    // 5. مسؤولو التخطيط والقيادة المدرسية (ممنوع عليهم الاستفسارات وبقية شاشات القبول)
-    if (activeOfficer.role === 'school_planning' || activeOfficer.role === 'school_leadership') {
+    // 7. مسؤولو التخطيط والقيادة المدرسية والمراحل التعليمية
+    if (
+      activeOfficer.role === 'school_planning' || 
+      activeOfficer.role === 'school_leadership' ||
+      activeOfficer.role === 'planning_vacancy_supervisor' ||
+      activeOfficer.role === 'primary_school_supervisor' ||
+      activeOfficer.role === 'intermediate_school_supervisor' ||
+      activeOfficer.role === 'secondary_school_supervisor' ||
+      activeOfficer.role === 'early_childhood_official' ||
+      activeOfficer.role === 'kindergarten_official'
+    ) {
       return ['placements'].includes(feature);
     }
 
@@ -330,6 +349,8 @@ export default function Dashboard({
   const [inquiriesDefaultTab, setInquiriesDefaultTab] = useState<'general' | 'my_claimed' | 'all'>('general');
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [editingOfficer, setEditingOfficer] = useState<OfficerUser | null>(null);
+  const [selectedOfficerIds, setSelectedOfficerIds] = useState<string[]>([]);
+  const [officersToDeleteModal, setOfficersToDeleteModal] = useState<OfficerUser[] | null>(null);
 
   const fileInputImportRef = useRef<HTMLInputElement>(null);
   const fileInputUpdateRef = useRef<HTMLInputElement>(null);
@@ -990,6 +1011,36 @@ export default function Dashboard({
     setShowAssignModal(false);
     setAssignTargetSurvey(null);
     setAssignNote('');
+  };
+
+  const handleSwitchToOfficer = (officer: OfficerUser) => {
+    setActiveOfficer(officer);
+    try {
+      localStorage.setItem('active_officer_id_v1', officer.id);
+    } catch {}
+
+    // Automatically navigate to the officer's dedicated view based on their role
+    if (officer.role === 'equivalency_supervisor') {
+      setActiveFeature('equivalency_requests');
+    } else if (
+      officer.role === 'school_planning' ||
+      officer.role === 'school_leadership' ||
+      officer.role === 'planning_vacancy_supervisor' ||
+      officer.role === 'primary_school_supervisor' ||
+      officer.role === 'intermediate_school_supervisor' ||
+      officer.role === 'secondary_school_supervisor' ||
+      officer.role === 'early_childhood_official' ||
+      officer.role === 'kindergarten_official'
+    ) {
+      setActiveFeature('placements');
+    } else if (officer.role === 'tech_support_supervisor') {
+      setActiveFeature('inquiries');
+    } else {
+      setActiveFeature('requests');
+    }
+
+    setClaimToastMessage(`✅ تم الانتقال بنجاح إلى حساب وصفحة الموظف: (${officer.nameAr})`);
+    setTimeout(() => setClaimToastMessage(null), 3500);
   };
 
   const handleAddUser = (newUser: OfficerUser) => {
@@ -1675,41 +1726,127 @@ export default function Dashboard({
               )}
            </div>
 
-         {/* ACCOUNT SWITCHER BAR (Admin Only) */}
+         {/* ACCOUNT SWITCHER BAR - التنقل الفعلي بين حسابات الموظفين */}
          {activeOfficer && (
-            <div className={`p-4 rounded-[28px] border shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 ${isDark ? 'bg-[#081e2b]/90 border-teal-800/40' : 'bg-white border-slate-200'}`}>
+            <div className={`p-4 rounded-[28px] border shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${isDark ? 'bg-[#081e2b]/90 border-teal-800/40' : 'bg-white border-slate-200'}`}>
                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center font-black">
+                  <div className="w-10 h-10 rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center font-black shrink-0">
                      <ShieldCheck className="w-5 h-5" />
                   </div>
                   <div>
-                     <div className="text-xs font-black text-slate-900 dark:text-white">شريط التنقل بين حسابات المسؤولين</div>
-                     <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">الحساب الحالي: <span className="text-teal-600 dark:text-teal-400 font-black">{activeOfficer.nameAr}</span> ({isSystemAdmin(activeOfficer) ? 'مدير النظام' : activeOfficer.role})</div>
+                     <div className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-2">
+                       <span>شريط التنقل السريع بين الحسابات والصلاحيات</span>
+                       {!isSystemAdmin(activeOfficer) && (
+                         <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-[10px] font-black">
+                           معاينة نشطة
+                         </span>
+                       )}
+                     </div>
+                     <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">
+                       الحساب المفعّل حالياً: <span className="text-teal-600 dark:text-teal-400 font-black">{activeOfficer.nameAr}</span> ({getOfficerRoleTitle(activeOfficer.role)})
+                     </div>
                   </div>
                </div>
-               <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-black text-slate-400">تبديل إلى:</span>
-                  {DEMO_OFFICERS.map(officer => (
-                     <button
-                       key={officer.id}
-                       onClick={() => {
-                          setEditingOfficer(officer);
-                          localStorage.setItem('active_officer_id_v1', officer.id);
-                       }}
-                       className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
-                          activeOfficer.id === officer.id 
-                            ? 'bg-teal-600 text-white shadow-md' 
-                            : isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-teal-900/30' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
-                       }`}
-                     >
-                        <span>{officer.nameAr.split(' ')[0]}</span>
-                        {isSystemAdmin(officer) && <span className="w-2 h-2 rounded-full bg-emerald-400" />}
-                     </button>
-                  ))}
+
+               {/* Account Switcher Controls */}
+               <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-start md:justify-end">
+                  <span className="text-xs font-black text-slate-400">الدخول بحساب:</span>
+                  
+                  {/* Dropdown for selecting any registered officer */}
+                  <select
+                    value={activeOfficer.id}
+                    onChange={(e) => {
+                      const selected = officers.find(o => o.id === e.target.value);
+                      if (selected) handleSwitchToOfficer(selected);
+                    }}
+                    className="px-3.5 py-2 bg-slate-50 dark:bg-[#061b28] border border-slate-200 dark:border-teal-800/40 rounded-xl text-xs font-black outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer text-slate-800 dark:text-slate-100 max-w-[220px] truncate"
+                  >
+                    {officers.map(o => (
+                      <option key={o.id} value={o.id}>
+                        {o.nameAr} ({getOfficerRoleTitle(o.role)}) {isSystemAdmin(o) ? '★ (الأدمن)' : ''}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Quick Click Badges for first officers */}
+                  <div className="hidden lg:flex items-center gap-1.5">
+                    {officers.slice(0, 4).map(officer => {
+                      const isSelected = activeOfficer.id === officer.id;
+                      return (
+                        <button
+                          key={officer.id}
+                          type="button"
+                          onClick={() => handleSwitchToOfficer(officer)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                            isSelected
+                              ? 'bg-teal-600 text-white shadow-sm ring-2 ring-teal-400'
+                              : isDark
+                                ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-teal-900/30'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                          }`}
+                          title={`الدخول بحساب ${officer.nameAr}`}
+                        >
+                          <span>{officer.nameAr.split(' ')[0]}</span>
+                          {isSystemAdmin(officer) && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Return to Admin Button if currently on a sub-account */}
+                  {!isSystemAdmin(activeOfficer) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const admin = officers.find(o => isSystemAdmin(o)) || DEMO_OFFICERS[0];
+                        handleSwitchToOfficer(admin);
+                      }}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all cursor-pointer shadow-sm flex items-center gap-1"
+                      title="العودة لحساب مدير النظام الرئيسي"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>حساب الأدمن</span>
+                    </button>
+                  )}
                </div>
             </div>
          )}
         </div>
+
+        {/* Global Impersonation / Active Account Banner when viewing as sub-account */}
+        {!isSystemAdmin(activeOfficer) && (
+           <div className="p-4 rounded-3xl bg-gradient-to-r from-indigo-900 via-indigo-800 to-teal-900 text-white shadow-xl border border-indigo-400/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fadeIn">
+              <div className="flex items-center gap-3">
+                 <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center font-black shrink-0 text-lg">
+                    👤
+                 </div>
+                 <div>
+                    <div className="text-sm font-black flex flex-wrap items-center gap-2">
+                       <span>أنت مسجل وتتصفح النظام الآن بحساب:</span>
+                       <span className="text-teal-300 font-extrabold underline">{activeOfficer.nameAr}</span>
+                       <span className="px-2.5 py-0.5 rounded-full bg-teal-500/20 border border-teal-300/40 text-teal-200 text-xs font-black">
+                          {getOfficerRoleTitle(activeOfficer.role)}
+                       </span>
+                    </div>
+                    <p className="text-xs text-slate-300 mt-1">
+                       يتم عرض كامل الشاشات والصلاحيات والمعاملات المخصصة لهذا الحساب كما يراها الموظف تماماً.
+                    </p>
+                 </div>
+              </div>
+
+              <button
+                 type="button"
+                 onClick={() => {
+                    const admin = officers.find(o => isSystemAdmin(o)) || DEMO_OFFICERS[0];
+                    handleSwitchToOfficer(admin);
+                 }}
+                 className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black transition-all cursor-pointer shadow-md flex items-center gap-2 shrink-0 active:scale-95"
+              >
+                 <ShieldCheck className="w-4 h-4" />
+                 <span>العودة لحساب الأدمن (أ. سالم الترجمي)</span>
+              </button>
+           </div>
+        )}
 
         {/* Urgent 2-Business-Days Delayed Requests Alert Banner on Main Screen */}
         {delayedRequestsList.length > 0 && (
@@ -3790,6 +3927,7 @@ export default function Dashboard({
         {activeFeature === 'staff' && (
           <div className="space-y-6">
             <div className={`p-6 rounded-[32px] border border-slate-100 dark:border-teal-800/20 shadow-xs ${isDark ? 'bg-[#081e2b]' : 'bg-white'}`}>
+               {/* Header Section */}
                <div className="flex flex-wrap items-center justify-between gap-4 mb-6 pb-5 border-b border-slate-100 dark:border-teal-800/20">
                   <div className="flex items-center gap-3">
                      <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 flex items-center justify-center text-indigo-600 shadow-inner">
@@ -3802,7 +3940,7 @@ export default function Dashboard({
                             {officers.length} كادر مسجل
                           </span>
                         </div>
-                        <p className="text-xs font-bold text-slate-400 mt-0.5">سجل المشرفين والموظفين، استيراد وتحديث الأسماء إكسل، وإدارة الصلاحيات والوصف الوظيفي.</p>
+                        <p className="text-xs font-bold text-slate-400 mt-0.5">سجل المشرفين والموظفين، استيراد وتحديث الأسماء إكسل، حذف وتحديد الكوادر دفعة واحدة.</p>
                      </div>
                   </div>
 
@@ -3868,15 +4006,55 @@ export default function Dashboard({
                   </div>
                </div>
 
-               {/* Quick Info Bar
-               
+               {/* Batch Multi-Select Actions Bar */}
+               <div className="p-3.5 mb-5 rounded-2xl bg-slate-100/90 dark:bg-slate-800/70 border border-slate-200 dark:border-teal-800/30 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-3">
+                     <label className="flex items-center gap-2 font-black text-slate-800 dark:text-slate-100 cursor-pointer select-none">
+                        <input
+                           type="checkbox"
+                           className="w-4 h-4 rounded-md accent-indigo-600 cursor-pointer"
+                           checked={officers.length > 0 && selectedOfficerIds.length === officers.length}
+                           onChange={(e) => {
+                              if (e.target.checked) {
+                                 setSelectedOfficerIds(officers.map(o => o.id));
+                              } else {
+                                 setSelectedOfficerIds([]);
+                              }
+                           }}
+                        />
+                        <span>تحديد الكل ({selectedOfficerIds.length} من {officers.length})</span>
+                     </label>
+
+                     {selectedOfficerIds.length > 0 && (
+                        <span className="text-[11px] font-black bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-xl">
+                           تم تحديد {selectedOfficerIds.length} مستخدم
+                        </span>
+                     )}
+                  </div>
+
+                  {selectedOfficerIds.length > 0 && (
+                     <button
+                        type="button"
+                        onClick={() => {
+                           const toDelete = officers.filter(o => selectedOfficerIds.includes(o.id));
+                           setOfficersToDeleteModal(toDelete);
+                        }}
+                        className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95"
+                     >
+                        <Trash2 className="w-4 h-4" />
+                        <span>حذف المحددين دفعة واحدة ({selectedOfficerIds.length})</span>
+                     </button>
+                  )}
+               </div>
+
+               {/* Quick Info Bar */}
                <div className="p-3.5 mb-6 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/30 flex flex-wrap items-center justify-between gap-3 text-xs">
                   <div className="flex items-center gap-2 text-indigo-900 dark:text-indigo-200 font-bold">
                      <Shield className="w-4 h-4 text-indigo-600 shrink-0" />
-                     <span>اضغط على اسم أي موظف للدخول إلى صفحته وتعديل صلاحياته، مهمته، ووصفه الوظيفي أو حذفه (للأدمن).</span>
+                     <span>اضغط على اسم أي موظف للدخول إلى صفحته، أو حدد الموظفين لحذفهم دفعة واحدة من سلة المهملات.</span>
                   </div>
                   <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                     🛡️ عمليات الاستيراد والتحديث تحافظ تماماً على السجلات السابقة دون حذف
+                     🛡️ عمليات الحذف تتم بتأكيد فوري وآمن
                   </div>
                </div>
 
@@ -3884,21 +4062,44 @@ export default function Dashboard({
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                   {officers.map(officer => {
                      const isCurrUserAdmin = officer.role === 'admin' || isSystemAdmin(officer);
+                     const isSelected = selectedOfficerIds.includes(officer.id);
+
                      return (
                         <div 
                            key={officer.id} 
-                           className="p-5 rounded-2xl border border-slate-200 dark:border-teal-800/40 bg-slate-50 dark:bg-slate-900/50 space-y-4 transition-all hover:border-indigo-500 hover:shadow-md"
+                           className={`p-5 rounded-2xl border transition-all ${
+                              isSelected 
+                                 ? 'border-indigo-500 ring-2 ring-indigo-500/40 bg-indigo-50/50 dark:bg-indigo-950/40 shadow-md' 
+                                 : 'border-slate-200 dark:border-teal-800/40 bg-slate-50 dark:bg-slate-900/50 hover:border-indigo-400'
+                           } space-y-4`}
                         >
-                           {/* User Top Row: Avatar + Name (Clickable) + Role Badge */}
+                           {/* User Top Row: Checkbox + Avatar + Name (Clickable) + Role Badge */}
                            <div className="flex items-start justify-between gap-3">
                               <div className="flex items-center gap-3 min-w-0">
-                                 <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-black text-sm shrink-0 shadow-xs ${
+                                 {/* Selection Checkbox */}
+                                 <input
+                                    type="checkbox"
+                                    className="w-4 h-4 rounded-md accent-indigo-600 cursor-pointer shrink-0"
+                                    checked={isSelected}
+                                    onChange={(e) => {
+                                       e.stopPropagation();
+                                       setSelectedOfficerIds(prev => 
+                                          prev.includes(officer.id) 
+                                             ? prev.filter(id => id !== officer.id)
+                                             : [...prev, officer.id]
+                                       );
+                                    }}
+                                    title="تحديد هذا المستخدم للحذف"
+                                 />
+
+                                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0 shadow-xs ${
                                     isCurrUserAdmin 
                                        ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300' 
                                        : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300'
                                  }`}>
                                     {officer.nameAr ? officer.nameAr.charAt(0) : 'م'}
                                  </div>
+
                                  <div className="min-w-0">
                                     <button
                                        type="button"
@@ -3960,27 +4161,18 @@ export default function Dashboard({
                                  <span>تعديل الصلاحيات</span>
                               </button>
 
-                              {(activeOfficer.role === 'admin' || isSystemAdmin(activeOfficer)) && (
-                                 <button
-                                    type="button"
-                                    onClick={(e) => {
-                                       e.stopPropagation();
-                                       if (confirm(`هل أنت متأكد من حذف الموظف (${officer.nameAr}) نهائياً؟`)) {
-                                          setOfficers(prev => {
-                                             const updated = prev.filter(o => o.id !== officer.id);
-                                             try { localStorage.setItem('officer_users_v4', JSON.stringify(updated)); } catch {}
-                                             return updated;
-                                          });
-                                          setClaimToastMessage(`تم حذف المستخدم (${officer.nameAr}) بنجاح`);
-                                          setTimeout(() => setClaimToastMessage(null), 3000);
-                                       }
-                                    }}
-                                    className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl transition-all cursor-pointer"
-                                    title="حذف المستخدم (صلاحية الأدمن)"
-                                 >
-                                    <Trash2 className="w-4 h-4" />
-                                 </button>
-                              )}
+                              {/* زر سلة المهملات - تأكيد فوري عبر نافذة النظام */}
+                              <button
+                                 type="button"
+                                 onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOfficersToDeleteModal([officer]);
+                                 }}
+                                 className="p-2 text-rose-500 hover:text-white hover:bg-rose-600 dark:hover:bg-rose-600 rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95 border border-rose-200/60 dark:border-rose-900/40"
+                                 title="حذف هذا المستخدم"
+                              >
+                                 <Trash2 className="w-4 h-4" />
+                              </button>
                            </div>
                         </div>
                      );
@@ -5000,6 +5192,74 @@ export default function Dashboard({
           isAdmin={activeOfficer.role === 'admin' || isSystemAdmin(activeOfficer)}
           isDark={isDark}
         />
+      )}
+
+      {/* MODAL: Confirmation for Single & Bulk Officer Deletion */}
+      {officersToDeleteModal && officersToDeleteModal.length > 0 && (
+        <div 
+          className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn" 
+          onClick={() => setOfficersToDeleteModal(null)}
+          dir="rtl"
+        >
+          <div 
+            className="bg-white dark:bg-[#081e2b] text-slate-900 dark:text-white p-6 sm:p-7 rounded-[32px] max-w-md w-full border border-slate-100 dark:border-teal-800/40 shadow-2xl space-y-4" 
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 shadow-inner">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-black text-base text-slate-900 dark:text-white">تأكيد حذف المستخدمين</h3>
+                <p className="text-xs font-bold text-slate-400 mt-0.5">
+                  {officersToDeleteModal.length === 1 
+                    ? `هل أنت متأكد من حذف الموظف (${officersToDeleteModal[0].nameAr}) نهائياً؟` 
+                    : `هل أنت متأكد من حذف ${officersToDeleteModal.length} مستخدمين محددين دفعة واحدة؟`}
+                </p>
+              </div>
+            </div>
+
+            <div className="max-h-40 overflow-y-auto space-y-1.5 p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-teal-800/30 text-xs font-bold">
+              {officersToDeleteModal.map(o => (
+                <div key={o.id} className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800 last:border-0">
+                  <span className="font-black text-slate-800 dark:text-slate-200">{o.nameAr}</span>
+                  <span className="text-[10px] text-slate-400">{getOfficerRoleTitle(o.role)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const idsToDelete = officersToDeleteModal.map(o => o.id);
+                  setOfficers(prev => {
+                    const updated = prev.filter(o => !idsToDelete.includes(o.id));
+                    try {
+                      localStorage.setItem('officer_users_v4', JSON.stringify(updated));
+                      localStorage.setItem('officer_users_v3', JSON.stringify(updated));
+                    } catch {}
+                    return updated;
+                  });
+                  setSelectedOfficerIds(prev => prev.filter(id => !idsToDelete.includes(id)));
+                  setOfficersToDeleteModal(null);
+                  setClaimToastMessage(`✅ تم حذف ${idsToDelete.length} مستخدم بنجاح`);
+                  setTimeout(() => setClaimToastMessage(null), 3500);
+                }}
+                className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black transition-all cursor-pointer shadow-sm active:scale-95"
+              >
+                نعم، احذف نهائياً ({officersToDeleteModal.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setOfficersToDeleteModal(null)}
+                className="py-3 px-5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-black transition-all cursor-pointer"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Claim / Action Toast Notification */}
