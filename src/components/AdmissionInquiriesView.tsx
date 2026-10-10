@@ -34,6 +34,7 @@ interface AdmissionInquiriesViewProps {
   isDark?: boolean;
   isRtl?: boolean;
   defaultTab?: 'general' | 'my_claimed' | 'all';
+  onNavigateToRequests?: () => void;
 }
 
 export default function AdmissionInquiriesView({
@@ -42,7 +43,8 @@ export default function AdmissionInquiriesView({
   activeOfficer,
   isDark = false,
   isRtl = true,
-  defaultTab = 'general'
+  defaultTab = 'general',
+  onNavigateToRequests
 }: AdmissionInquiriesViewProps) {
   // Navigation View: 'general' (شاشة الاستفسارات العامة), 'my_claimed' (استفسارات المسؤول المستلمة), 'all' (الكل)
   const [viewMode, setViewMode] = useState<'general' | 'my_claimed' | 'all'>(defaultTab);
@@ -280,6 +282,25 @@ export default function AdmissionInquiriesView({
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#009688] text-white px-6 py-3.5 rounded-2xl shadow-2xl font-black text-xs sm:text-sm flex items-center gap-2.5 border-2 border-emerald-300 animate-bounce max-w-lg text-center">
           <CheckCircle2 className="w-5 h-5 text-emerald-200 shrink-0" />
           <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Quick Navigation to Requests Screen */}
+      {onNavigateToRequests && (
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-teal-50/90 dark:bg-teal-950/30 border border-teal-200/90 dark:border-teal-900/40">
+          <div className="flex items-center gap-2 text-xs font-black text-teal-900 dark:text-teal-200">
+            <span className="w-2 h-2 rounded-full bg-[#009688] animate-pulse"></span>
+            <span>أنت تتصفح الآن: <strong>شاشة الاستفسارات والتواصل</strong></span>
+          </div>
+          <button
+            type="button"
+            onClick={onNavigateToRequests}
+            className="px-4 py-2 bg-[#009688] hover:bg-teal-700 text-white font-black text-xs rounded-xl shadow-sm flex items-center gap-2 cursor-pointer transition-all active:scale-95"
+            title="الانتقال إلى شاشة طلبات القبول والتسجيل والنقل"
+          >
+            <Send className="w-4 h-4" />
+            <span>الانتقال لشاشة طلبات القبول والتسجيل والنقل</span>
+          </button>
         </div>
       )}
 

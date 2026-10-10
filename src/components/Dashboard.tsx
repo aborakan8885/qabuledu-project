@@ -261,50 +261,111 @@ export default function Dashboard({
   >('requests');
   
   const isFeatureAllowedForOfficer = (feature: string): boolean => {
-    // التحقق الحصري من صلاحية الأدمن (مقتصرة فقط على أ. سالم محمد الترجمي 1068575628)
+    // 1. التحقق الحصري من صلاحية الأدمن (مقتصرة فقط على أ. سالم محمد الترجمي 1068575628)
     const isCurrentAdmin = isSystemAdmin(activeOfficer);
+    if (isCurrentAdmin) return true;
 
-    // صفحة الاستفسارات والتواصل: تظهر وتتاح لجميع مسؤولي القبول فقط (الأدمن، مشرف القبول، مشرف المعادلة والقبول)
-    // وممنوعة تماماً عن غير مسؤولي القبول (مثل التخطيط والقيادة المدرسية)
+    // 2. التحقق من الصلاحيات الممنوحة صراحة للموظف (من شاشة الصلاحيات والكوادر)
+    const perms = (activeOfficer.permissions || {}) as Record<string, boolean | undefined>;
+
+    if (feature === 'inquiries') {
+      if (perms.canViewInquiries === true || perms.inquiries === true) return true;
+    }
+    if (feature === 'requests') {
+      // مسموحة صراحة إذا كانت محددة، أو إذا كان لديه أي صلاحية تخص القبول أو الاستفسارات أو التتبع
+      if (
+        perms.canViewDashboard === true || 
+        perms.requests === true || 
+        perms.canViewInquiries === true || 
+        perms.canTrackNewRegistration === true || 
+        perms.canTrackTransfers === true
+      ) return true;
+
+      // ومسموحة تلقائياً لجميع المشرفين ومنسوبي وحدة القبول والتسجيل
+      const rStr = String(activeOfficer.role || '').toLowerCase();
+      const uStr = String(activeOfficer.workField || activeOfficer.unit || '').toLowerCase();
+      if (
+        rStr === 'supervisor' ||
+        rStr === 'manager_admission_unit' ||
+        rStr === 'tech_support_supervisor' ||
+        rStr === 'director' ||
+        rStr.includes('مشرف') ||
+        rStr.includes('قبول') ||
+        rStr.includes('supervisor') ||
+        uStr.includes('قبول') ||
+        uStr.includes('مشرف')
+      ) return true;
+    }
+    if (feature === 'equivalency_requests') {
+      if (perms.canViewEquivalencyRequests === true || perms.equivalency === true) return true;
+    }
+    if (feature === 'placements') {
+      if (perms.canViewSchoolTransfers === true || perms.placements === true) return true;
+    }
+    if (feature === 'feedback') {
+      if (perms.canViewFeedback === true || perms.feedback === true) return true;
+    }
+    if (feature === 'alerts') {
+      if (perms.canViewAlerts === true || perms.alerts === true) return true;
+    }
+    if (feature === 'staff') {
+      if (perms.canViewStaff === true || perms.staff === true) return true;
+    }
+    if (feature === 'schools') {
+      if (perms.canViewSchools === true || perms.schools === true) return true;
+    }
+    if (feature === 'principal_data') {
+      if (perms.canViewPrincipalData === true || perms.principal_data === true) return true;
+    }
+    if (feature === 'settings') {
+      if (perms.canViewSettings === true || perms.settings === true) return true;
+    }
+    if (feature === 'sync') {
+      if (perms.canViewSync === true || perms.sync === true) return true;
+    }
+    if (feature === 'reports') {
+      if (perms.canViewReports === true || perms.reports === true) return true;
+    }
+
+    // 3. فحص الصلاحيات الافتراضية بحسب المسمى والدور الوظيفي
+    // أ) شاشة الاستفسارات والتواصل: تتاح لجميع مسؤولي القبول والدعم الفني
     if (feature === 'inquiries') {
       return (
-        isCurrentAdmin ||
         activeOfficer.role === 'director' ||
+        activeOfficer.role === 'manager_admission_unit' ||
         activeOfficer.role === 'supervisor' ||
+        activeOfficer.role === 'tech_support_supervisor' ||
         activeOfficer.role === 'equivalency_supervisor'
       );
     }
 
-    // 1. الأدمن / كل شيء (حصرياً لسالم محمد الترجمي)
-    if (isCurrentAdmin) return true;
-
-    // 2. المدير / جميعها ما عدا: المزامنة والربط الالكتروني - لوحة الاعدادت الشاملة - منسوبي الادارة والكوادر والصلاحيات - دليل المدارس والأرقام الوزارية - التقارير المتقدمة - بيانات مديري المدارس
+    // ب) مدير الإدارة
     if (activeOfficer.role === 'director') {
       const forbiddenForDirector = ['sync', 'settings', 'staff', 'schools', 'reports'];
       return !forbiddenForDirector.includes(feature);
     }
 
-    // 3. مدير وحدة القبول
+    // ج) مدير وحدة القبول
     if (activeOfficer.role === 'manager_admission_unit') {
       return ['requests', 'equivalency_requests', 'inquiries', 'principal_reports', 'feedback', 'alerts', 'satisfaction', 'schools'].includes(feature);
     }
 
-    // 4. مشرف وحدة القبول (القبول والتسجيل)
+    // د) مشرف وحدة القبول (القبول والتسجيل)
     if (activeOfficer.role === 'supervisor') {
       return ['requests', 'inquiries', 'principal_reports', 'feedback', 'alerts', 'satisfaction'].includes(feature);
     }
 
-    // 5. مشرف القبول دعم فني
+    // هـ) مشرف القبول دعم فني
     if (activeOfficer.role === 'tech_support_supervisor') {
       return ['inquiries', 'requests', 'feedback', 'alerts'].includes(feature);
     }
 
-    // 6. مشرف وحدة القبول معادلة المؤهلات
+    // و) مشرف وحدة القبول معادلة المؤهلات
     if (activeOfficer.role === 'equivalency_supervisor') {
       return ['equivalency_requests', 'inquiries', 'feedback', 'alerts', 'satisfaction'].includes(feature);
     }
 
-    // 7. مسؤولو التخطيط والقيادة المدرسية والمراحل التعليمية
+    // ز) مسؤولو التخطيط والقيادة المدرسية
     if (
       activeOfficer.role === 'school_planning' || 
       activeOfficer.role === 'school_leadership' ||
@@ -321,7 +382,7 @@ export default function Dashboard({
     return false;
   };
 
-  // Ensure non-admin / non-director cannot stay on an unauthorized screen
+    // Ensure non-admin / non-director cannot stay on an unauthorized screen
   React.useEffect(() => {
     if (!isFeatureAllowedForOfficer(activeFeature)) {
       if (activeOfficer.role === 'equivalency_supervisor') {
@@ -1048,8 +1109,14 @@ export default function Dashboard({
   };
 
   const handleAddUser = (newUser: OfficerUser) => {
-    setOfficers([...officers, newUser]);
+    setOfficers(prev => {
+      const updated = [...prev, newUser];
+      try { localStorage.setItem('officer_users_v4', JSON.stringify(updated)); } catch {}
+      return updated;
+    });
     setShowAddUserModal(false);
+    setClaimToastMessage(`✅ تمت إضافة المستخدم (${newUser.nameAr}) بنجاح`);
+    setTimeout(() => setClaimToastMessage(null), 3000);
   };
 
 
@@ -3208,6 +3275,7 @@ export default function Dashboard({
               isDark={isDark}
               isRtl={isRtl}
               defaultTab={inquiriesDefaultTab}
+              onNavigateToRequests={() => setActiveFeature('requests')}
             />
           </div>
         )}
@@ -5178,6 +5246,10 @@ export default function Dashboard({
               try { localStorage.setItem('officer_users_v4', JSON.stringify(updatedList)); } catch {}
               return updatedList;
             });
+            // إذا كان الموظف المعدل هو نفس الحساب النشط حالياً، حدث بياناته فوراً
+            if (activeOfficer.id === updated.id) {
+              setActiveOfficer(updated);
+            }
             setEditingOfficer(null);
             setClaimToastMessage(`تم حفظ وتحديث بيانات الموظف (${updated.nameAr}) والصلاحيات بنجاح ✅`);
             setTimeout(() => setClaimToastMessage(null), 3000);

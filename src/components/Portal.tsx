@@ -1128,8 +1128,8 @@ export default function Portal({
                       isDark ? 'text-teal-200/70' : 'text-slate-500'
                     }`}>
                       {isRtl
-                        ? 'خدمة الاستفسار المباشر ومتابعة الاستفسار بالاسم فقط مع تقييم الخدمة في إجابة مسؤول القبول'
-                        : 'Direct inquiry service, tracking by name only, and rating the admission officer answer'}
+                        ? 'خدمة الاستفسار المباشر للمستفيدين ومتابعة الاستفسار بالاسم فقط'
+                        : 'Direct inquiry service for beneficiaries and tracking by name only'}
                     </p>
                   </div>
                 </div>
