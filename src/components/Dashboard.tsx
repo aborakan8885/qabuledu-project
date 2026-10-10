@@ -405,7 +405,7 @@ export default function Dashboard({
         const roleIdx = getColIdx(['المهمة', 'الدور', 'المسمى الوظيفي', 'الدور الوظيفي', 'الوظيفة', 'role']);
         const descIdx = getColIdx(['الوصف الوظيفي', 'الوصف', 'مهام الوظيفة', 'description']);
         const stageIdx = getColIdx(['المرحلة', 'المرحلة الدراسية', 'stage']);
-        const workFieldIdx = getColIdx(['مجال العمل', 'القسم', 'الإدارة', 'workfield']);
+        const workFieldIdx = getColIdx(['الجهة', 'جهة العمل', 'مجال العمل', 'القسم', 'الإدارة', 'الوحدة', 'workfield', 'entity']);
 
         // Fallback: If no explicit name column was found, pick first column with non-empty strings
         const effectiveNameIdx = nameIdx !== -1 ? nameIdx : 0;
@@ -439,7 +439,9 @@ export default function Dashboard({
             roleDescription: desc,
             assignedStage: stage,
             workField: workField,
-            tasks: desc,
+            tasks: roleRaw || desc,
+            taskText: roleRaw || desc,
+            assignedRoleText: roleRaw,
             permissions: {}
           });
         });
@@ -476,6 +478,8 @@ export default function Dashboard({
                   roleDescription: newUser.roleDescription || updated[index].roleDescription,
                   workField: newUser.workField || updated[index].workField,
                   assignedStage: newUser.assignedStage || updated[index].assignedStage,
+                  tasks: newUser.tasks || updated[index].tasks,
+                  taskText: newUser.taskText || (updated[index] as any).taskText,
                 };
                 updatedCount++;
               } else {

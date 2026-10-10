@@ -1450,16 +1450,107 @@ export default function Portal({
                           setIsAdminRetrieving(true);
                           setLoginError('');
                           setTimeout(() => {
-                            const match = OFFICIAL_ADMINS.find(a => a.nationalId === enteredCivilId); // Simplified match
+                            // تنظيف وتحويل أرقام السجل المدني للإنجليزية
+                            const cleanEnteredId = (enteredCivilId || '')
+                              .replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
+                              .replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+                              .trim();
+
+                            // تجميع كافة منسوبي الإدارة من التخزين المحلي وملفات الإكسل المرفوعة
+                            let allOfficersList: any[] = [];
+                            
+                            // 1. القائمة الأحدث المرفوعة من ملفات الإكسل (v4)
+                            try {
+                              const raw4 = localStorage.getItem('officer_users_v4');
+                              if (raw4) {
+                                const p4 = JSON.parse(raw4);
+                                if (Array.isArray(p4)) allOfficersList.push(...p4);
+                              }
+                            } catch {}
+
+                            // 2. القائمة السابقة (v3)
+                            try {
+                              const raw3 = localStorage.getItem('officer_users_v3');
+                              if (raw3) {
+                                const p3 = JSON.parse(raw3);
+                                if (Array.isArray(p3)) {
+                                  p3.forEach((o: any) => {
+                                    if (!allOfficersList.some(x => String(x.nationalId).trim() === String(o.nationalId).trim())) {
+                                      allOfficersList.push(o);
+                                    }
+                                  });
+                                }
+                              }
+                            } catch {}
+
+                            // 3. المنسوبون التجريبيون المعتمدون
+                            DEMO_OFFICERS.forEach(d => {
+                              if (!allOfficersList.some(x => String(x.nationalId).trim() === String(d.nationalId).trim())) {
+                                allOfficersList.push(d);
+                              }
+                            });
+
+                            // 4. المسؤولون الرسميون
+                            OFFICIAL_ADMINS.forEach(d => {
+                              if (!allOfficersList.some(x => String(x.nationalId).trim() === String(d.nationalId).trim())) {
+                                allOfficersList.push(d);
+                              }
+                            });
+
+                            // البحث الدقيق والشامل بالسجل المدني أو الجوال أو المعرف
+                            const match = allOfficersList.find((a: any) => {
+                              const aNat = String(a.nationalId || '').trim();
+                              const aMob = String(a.mobile || '').trim();
+                              const aId = String(a.id || '').trim();
+                              return aNat === cleanEnteredId || aMob === cleanEnteredId || aId === cleanEnteredId;
+                            });
+
                             if (match) {
-                              setRetrievedAdminData(match);
+                              const roleTitleMap: Record<string, string> = {
+                                admin: 'مدير النظام (أدمن - كامل الصلاحيات)',
+                                director: 'مدير الإدارة',
+                                manager_admission_unit: 'مدير وحدة القبول',
+                                supervisor: 'مشرف وحدة القبول والتوجيه',
+                                tech_support_supervisor: 'مشرف القبول دعم فني',
+                                equivalency_supervisor: 'مشرف القبول معادلة الشهادات',
+                                planning_vacancy_supervisor: 'مشرف التخطيط فتح الشواغر',
+                                school_planning: 'مشرف التخطيط المدرسي',
+                                school_leadership: 'مشرف القيادة المدرسية',
+                                primary_school_supervisor: 'مشرف الإدارة المدرسية (ابتدائي)',
+                                intermediate_school_supervisor: 'مشرف الإدارة المدرسية (متوسط)',
+                                secondary_school_supervisor: 'مشرف الإدارة المدرسية (ثانوي)',
+                                early_childhood_official: 'مسؤول الطفولة المبكرة',
+                                kindergarten_official: 'مسؤول رياض الأطفال',
+                              };
+
+                              const roleText = match.roleDescription || match.tasks || roleTitleMap[match.role] || (match.role === 'admin' ? 'مدير النظام' : 'مشرف معتمد');
+                              const unitText = match.workField || match.unit || match['الجهة'] || selectedAdminUnit || 'وحدة القبول والتسجيل';
+                              const mobileText = match.mobile || match['رقم الجوال'] || match['الجوال'] || '';
+                              const emailText = match.personalEmail || match.email || match['البريد الوزاري'] || match['البريد'] || '';
+                              const taskText = match.taskText || match.tasks || match.assignedRoleText || match['المهمة'] || match.roleDescription || roleTitleMap[match.role] || match.role || 'مشرف معتمد';
+
+                              setRetrievedAdminData({
+                                ...match,
+                                nationalId: match.nationalId || cleanEnteredId,
+                                nameAr: match.nameAr || match['الاسم الرباعي'] || match['الاسم'] || 'منسوب معتمد',
+                                unit: unitText,
+                                role: match.role || 'supervisor',
+                                roleDesc: roleText,
+                                mobile: mobileText,
+                                personalEmail: emailText,
+                                taskText: taskText,
+                              });
                               setAdminRetrievalStatus('success');
+                              setLoginError('');
                             } else {
                               setAdminRetrievalStatus('error');
-                              setLoginError(isRtl ? 'لم يتم العثور على بيانات منسوب بهذا السجل في الجهة المختارة.' : 'No staff record found for this ID in selected unit.');
+                              setLoginError(isRtl 
+                                ? `لم يتم العثور على منسوب مسجل برقم السجل (${cleanEnteredId}). يرجى التأكد من رفع السجل ضمن ملف إكسل منسوبي الإدارة أولاً في لوحة التحكم.` 
+                                : `No staff record found with ID (${cleanEnteredId}). Please ensure uploaded via Excel.`
+                              );
                             }
                             setIsAdminRetrieving(false);
-                          }, 1000);
+                          }, 600);
                         }}
                         disabled={isAdminRetrieving || !selectedAdminUnit || enteredCivilId.length < 10}
                         className={`w-full py-3.5 rounded-xl font-black text-sm flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 ${
@@ -1496,19 +1587,44 @@ export default function Portal({
                           {isRtl ? 'البيانات المسجلة رسمياً في النظام:' : 'Official Data Found:'}
                         </span>
                       </div>
-                      <div className="grid grid-cols-1 gap-3">
-                        <div className="flex justify-between items-center text-[11px] font-bold">
-                          <span className="text-slate-500">{isRtl ? 'اسم المنسوب:' : 'Staff Name:'}</span>
-                          <span className={isDark ? 'text-indigo-300' : 'text-indigo-900'}>{retrievedAdminData.nameAr}</span>
+                      <div className="space-y-2 bg-white/80 dark:bg-[#061b28]/80 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/40 shadow-xs">
+                        {/* 1. الاسم الرباعي */}
+                        <div className="flex justify-between items-center text-xs font-bold border-b border-slate-100 dark:border-slate-800/80 pb-2">
+                          <span className="text-slate-500 dark:text-slate-400 font-black">{isRtl ? 'الاسم الرباعي:' : 'Full Name:'}</span>
+                          <span className={`font-black text-xs ${isDark ? 'text-indigo-300' : 'text-indigo-950'}`}>{retrievedAdminData.nameAr}</span>
                         </div>
-                        <div className="flex justify-between items-center text-[11px] font-bold">
-                          <span className="text-slate-500">{isRtl ? 'الجهة / الإدارة:' : 'Unit / Dept:'}</span>
-                          <span className={isDark ? 'text-indigo-300' : 'text-indigo-900'}>{retrievedAdminData.unit}</span>
+
+                        {/* 2. الجهة */}
+                        <div className="flex justify-between items-center text-xs font-bold border-b border-slate-100 dark:border-slate-800/80 pb-2">
+                          <span className="text-slate-500 dark:text-slate-400 font-black">{isRtl ? 'الجهة:' : 'Department:'}</span>
+                          <span className={`font-bold text-xs ${isDark ? 'text-teal-300' : 'text-teal-800'}`}>{retrievedAdminData.unit || 'وحدة القبول والتسجيل'}</span>
                         </div>
-                        <div className="flex justify-between items-center text-[11px] font-bold">
-                          <span className="text-slate-500">{isRtl ? 'الدور الوظيفي:' : 'Functional Role:'}</span>
-                          <span className="px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300">
-                            {retrievedAdminData.roleDesc}
+
+                        {/* 3. المهمة المستدعاة من ملف الإكسل */}
+                        <div className="flex justify-between items-center text-xs font-bold border-b border-slate-100 dark:border-slate-800/80 pb-2">
+                          <span className="text-slate-500 dark:text-slate-400 font-black">{isRtl ? 'المهمة:' : 'Role / Task:'}</span>
+                          <span className="px-2.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-black text-xs">
+                            {retrievedAdminData.taskText || retrievedAdminData.roleDesc || (isRtl ? 'مشرف معتمد' : 'Officer')}
+                          </span>
+                        </div>
+
+                        {/* 4. السجل المدني */}
+                        <div className="flex justify-between items-center text-xs font-bold border-b border-slate-100 dark:border-slate-800/80 pb-2">
+                          <span className="text-slate-500 dark:text-slate-400 font-black">{isRtl ? 'السجل المدني:' : 'Civil ID:'}</span>
+                          <span className="font-mono font-black text-xs text-slate-800 dark:text-slate-200">{retrievedAdminData.nationalId}</span>
+                        </div>
+
+                        {/* 4. رقم الجوال */}
+                        <div className="flex justify-between items-center text-xs font-bold border-b border-slate-100 dark:border-slate-800/80 pb-2">
+                          <span className="text-slate-500 dark:text-slate-400 font-black">{isRtl ? 'رقم الجوال:' : 'Mobile Number:'}</span>
+                          <span className="font-mono font-bold text-xs text-slate-800 dark:text-slate-200">{retrievedAdminData.mobile || (isRtl ? 'غير مسجل' : 'N/A')}</span>
+                        </div>
+
+                        {/* 5. البريد الوزاري */}
+                        <div className="flex justify-between items-center text-xs font-bold">
+                          <span className="text-slate-500 dark:text-slate-400 font-black">{isRtl ? 'البريد الوزاري:' : 'Ministry Email:'}</span>
+                          <span className="font-mono font-bold text-xs text-slate-700 dark:text-slate-300 truncate max-w-[200px]" dir="ltr">
+                            {retrievedAdminData.personalEmail || (isRtl ? 'غير مسجل' : 'N/A')}
                           </span>
                         </div>
                       </div>
@@ -1551,6 +1667,23 @@ export default function Portal({
                           const filteredRegs = existingRegs.filter((a: any) => a.nationalId !== newAdmin.nationalId);
                           filteredRegs.push(newAdmin);
                           localStorage.setItem('registered_admins_v1', JSON.stringify(filteredRegs));
+
+                          // تحديث كلمة السر في قائمة الموظفين officer_users_v4 لتمكينه من الدخول المباشر
+                          try {
+                            const raw4 = localStorage.getItem('officer_users_v4');
+                            if (raw4) {
+                              const list = JSON.parse(raw4);
+                              if (Array.isArray(list)) {
+                                const idx = list.findIndex((o: any) => String(o.nationalId).trim() === String(newAdmin.nationalId).trim());
+                                if (idx !== -1) {
+                                  list[idx] = { ...list[idx], password: pwd, isActive: true };
+                                } else {
+                                  list.push(newAdmin);
+                                }
+                                localStorage.setItem('officer_users_v4', JSON.stringify(list));
+                              }
+                            }
+                          } catch {}
                           
                           // Auto Login or Success Feedback
                           setAdminAuthMode('login');

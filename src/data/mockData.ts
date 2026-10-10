@@ -10,13 +10,9 @@ export const EMPLOYEES = [
 ];
 
 export const ADMIN_UNITS = [
-  'الإدارة العامة ورعاية المستفيدين والنظام',
   'وحدة القبول والتسجيل',
-  'وحدة رعاية المستفيدين',
-  'إدارة التوجيه والطلاب',
-  'وحدة الدعم الفني وتقنية المعلومات',
-  'قسم التخطيط المدرسي',
-  'وحدة شؤون المعلمين'
+  'الادارة المدرسية',
+  'التخطيط المدرسي'
 ];
 
 export const OFFICIAL_ADMINS = [
@@ -250,7 +246,7 @@ export const TRANSLATIONS = {
     encryptionDetails: 'يتم تخزين بيانات الهوية ورقم الهاتف مشفرة محلياً وقبل المزامنة السحابية لضمان الامتثال لسياسات حماية الخصوصية الوطنية والأمن السيبراني.',
 
     // Unified Access Portal & School Principal Keys
-    portalTitle: 'منصة خدمات المستفيد للقبول',
+    portalTitle: 'منصة خدمات المستفيد للقبول الاستثنائي',
     portalSubtitle: 'يرجى اختيار صفتك أو هويتك للدخول إلى الخدمة المخصصة لك بكل أمان وسهولة',
     roleParent: 'مستفيد (ولي أمر)',
     roleParentDesc: 'لتقديم طلب تسجيل أو نقل أو شكوى أو ملاحظة أو دعم ومتابعة خاصة في قبول الطلاب فقط',
@@ -421,7 +417,7 @@ export const TRANSLATIONS = {
     encryptionDetails: 'Identity and phone number data are stored encrypted locally and before cloud synchronization to ensure compliance with national privacy and cybersecurity policies.',
 
     // Unified Access Portal & School Principal Keys
-    portalTitle: 'Unified Admissions Services Platform',
+    portalTitle: 'Unified Exceptional Admissions Services Platform',
     portalSubtitle: 'Please select your identity to proceed to the designated service securely',
     roleParent: 'Beneficiary (Parent)',
     roleParentDesc: 'To submit a registration, transfer, complaint, note, or specialized support and follow-up request regarding student admissions only.',
