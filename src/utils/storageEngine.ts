@@ -1,5 +1,7 @@
 import * as XLSX from 'xlsx';
 import { SurveyResponse, PrincipalReport, SchoolItem, OfficerUser, BeneficiaryFeedback, BeneficiaryInquiry, ProblemType } from '../types';
+import masterSchoolsData from '../data/masterSchoolsData.json';
+import masterOfficersData from '../data/masterOfficersData.json';
 
 const DB_NAME = 'MoeSmartSystemDB_v2';
 const DB_VERSION = 2;
@@ -190,12 +192,11 @@ export async function loadSurveysFromStorage(): Promise<SurveyResponse[]> {
 // ----------------------------------------------------
 export async function saveSchoolsToStorage(schools: SchoolItem[], options?: { isConfirmedAdminClear?: boolean }): Promise<void> {
   if (!schools || !Array.isArray(schools)) return;
-  if (schools.length === 0 && !options?.isConfirmedAdminClear) {
-    const existing = await loadSchoolsFromStorage();
-    if (existing && existing.length > 0) {
-      console.warn('Blocked empty schools overwrite to protect existing school records.');
-      return;
-    }
+  const masterCount = (masterSchoolsData as any[]).length;
+  // STRICT ANTI-DATA-LOSS: Never allow saving empty or truncated list over the master records
+  if (schools.length < masterCount && !options?.isConfirmedAdminClear) {
+    console.warn(`[StorageEngine] Blocked truncated schools list save (${schools.length} < ${masterCount}) to protect authentic records.`);
+    return;
   }
   try {
     const db = await openDB();
@@ -215,16 +216,10 @@ export async function saveSchoolsToStorage(schools: SchoolItem[], options?: { is
   } catch (err) {
     console.warn('IndexedDB saveSchools failed:', err);
   }
-  try {
-    localStorage.setItem('app_schools_list_v1', JSON.stringify(schools));
-    localStorage.setItem('app_schools_saved_v1', 'true');
-    localStorage.setItem('app_schools_last_saved_at', new Date().toISOString());
-  } catch (quotaErr) {
-    console.warn('LocalStorage quota exceeded for schools list, preserved in IndexedDB successfully.');
-  }
 }
 
 export async function loadSchoolsFromStorage(): Promise<SchoolItem[]> {
+  const masterList = (masterSchoolsData as SchoolItem[]) || [];
   let dbSchools: SchoolItem[] = [];
   try {
     const db = await openDB();
@@ -238,19 +233,11 @@ export async function loadSchoolsFromStorage(): Promise<SchoolItem[]> {
   } catch (err) {
     console.warn('IndexedDB loadSchools failed:', err);
   }
-  let lsSchools: SchoolItem[] = [];
-  try {
-    const cached = localStorage.getItem('app_schools_list_v1');
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed)) lsSchools = parsed;
-    }
-  } catch {
-    /* ignore */
+
+  if (dbSchools && dbSchools.length >= masterList.length) {
+    return dbSchools;
   }
-  if (dbSchools && dbSchools.length > 0) return dbSchools;
-  if (lsSchools && lsSchools.length > 0) return lsSchools;
-  return [];
+  return masterList;
 }
 
 // ----------------------------------------------------
@@ -339,79 +326,25 @@ const PRIMARY_SUPER_ADMIN: OfficerUser = {
   roleDescription: 'مدير النظام (الأدمن الحصري والوحيد) - كامل الصلاحيات وإدارة المستخدمين والمدارس'
 };
 
-export const DEMO_OFFICERS: OfficerUser[] = [
-  PRIMARY_SUPER_ADMIN,
-  {
-    id: 'emp_followup',
-    nameAr: 'عبدالرحيم الأحمدي (مشرف القبول والتسجيل)',
-    nameEn: 'Abdulrahim Al-Ahmadi - Admission & Registration Supervisor',
-    nationalId: '1111111111',
-    role: 'supervisor',
-    mobile: '0500000001',
-    isActive: true,
-    password: 'password123',
-    workField: 'وحدة القبول - قسم القبول والتسجيل ونقل الطلاب',
-    roleDescription: 'استلام المعاملات والشكاوي وتوجيهها للمستفيدين والمتابعة'
-  },
-  {
-    id: 'emp_equivalency',
-    nameAr: 'رمزي المزيني (مشرف القبول معادلة الشهادات)',
-    nameEn: 'Ramzi Al-Muzaini - Equivalency Supervisor',
-    nationalId: '2222222222',
-    role: 'equivalency_supervisor',
-    mobile: '0500000002',
-    isActive: true,
-    password: 'password123',
-    canHandleEqualizations: true,
-    workField: 'وحدة القبول - قسم معادلة الشهادات والمؤهلات الدراسية',
-    roleDescription: 'فحص ومعادلة الشهادات والمؤهلات الدراسية وتحديد المواعيد والاعتماد'
-  },
-  {
-    id: 'emp_planning',
-    nameAr: 'كمال الأحمدي (مسؤول الشواغر)',
-    nameEn: 'Kamal Al-Ahmadi - School Planning',
-    nationalId: '3333333333',
-    role: 'school_planning',
-    mobile: '0500000003',
-    isActive: true,
-    password: 'password123',
-    workField: 'إدارة التخطيط المدرسي - قسم الشواغر والميزانيات',
-    roleDescription: 'مشرف تخطيط مسؤول عن فتح الشواغر وتوزيع الميزانية المدرسية'
-  },
-  {
-    id: 'emp_leadership',
-    nameAr: 'سامي الأحمدي (مشرف قيادة)',
-    nameEn: 'Sami Al-Ahmadi - School Leadership',
-    nationalId: '4444444444',
-    role: 'school_leadership',
-    mobile: '0500000004',
-    isActive: true,
-    password: 'password123',
-    assignedGender: 'girls',
-    assignedStage: 'الكل',
-    workField: 'إدارة القيادة المدرسية - الشؤون التعليمية',
-    roleDescription: 'مشرف قيادة مسؤول عن متابعة التشكيلات المدرسية وتوجيه مديري المدارس'
-  }
-];
+export const DEMO_OFFICERS: OfficerUser[] = (masterOfficersData as OfficerUser[]) || [PRIMARY_SUPER_ADMIN];
 
 export async function saveOfficersToStorage(officers: OfficerUser[]): Promise<void> {
   if (!officers || !Array.isArray(officers) || officers.length === 0) return;
   
   // Guarantee Primary Super Admin is included and never deleted, and NO other user has admin role
-  const listToSave = officers.map(o => {
+  const listToSave: OfficerUser[] = officers.map((o): OfficerUser => {
     if (o.nationalId === '1068575628' || o.id === 'emp_1') {
       return {
         ...o,
         ...PRIMARY_SUPER_ADMIN,
         isActive: true,
-        role: 'admin' as const
+        role: 'admin'
       };
     }
-    // Strict enforcement: Only Salem Mohammed Al-Tarjami (1068575628) has admin permissions
     if (o.role === 'admin') {
       return {
         ...o,
-        role: 'supervisor' as const,
+        role: 'supervisor',
         canGrantRoles: false,
         canDeleteUsers: false,
         canAddUsers: false

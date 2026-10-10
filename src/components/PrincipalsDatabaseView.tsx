@@ -389,7 +389,7 @@ export const PrincipalsDatabaseView: React.FC<PrincipalsDatabaseViewProps> = ({
       return item;
     });
 
-    if (importMode === 'replace' && isSystemAdmin(activeOfficer)) {
+    if (importMode === 'replace' && isSystemAdmin(activeOfficer) && newSchoolsList.length >= schools.length) {
       (onUpdateSchools as any)(newSchoolsList, true);
       showToast(`تم استبدال وحفظ بيانات ${newSchoolsList.length} مدرسة ومدير بنجاح!`, 'success');
     } else {

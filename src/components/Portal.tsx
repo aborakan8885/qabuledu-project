@@ -105,17 +105,10 @@ export default function Portal({
   const isDark = theme === 'dark';
 
   const activeSchools = useMemo(() => {
-    if (schools !== undefined && schools !== INITIAL_SCHOOLS) {
+    if (schools && schools.length >= INITIAL_SCHOOLS.length) {
       return schools;
     }
-    const cached = localStorage.getItem('app_schools_list_v1');
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed)) return parsed;
-      } catch { /* ignore */ }
-    }
-    return schools || INITIAL_SCHOOLS;
+    return INITIAL_SCHOOLS;
   }, [schools]);
 
   // Portal view state: 'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard' | 'admin-login'

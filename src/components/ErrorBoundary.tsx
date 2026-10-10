@@ -35,10 +35,8 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   handleClearAndReset = () => {
-    if (window.confirm('سيتم حذف البيانات المؤقتة وإعادة ضبط النظام بالكامل. هل أنت متأكد؟')) {
-      localStorage.clear();
-      window.location.href = '/';
-    }
+    sessionStorage.clear();
+    window.location.reload();
   };
 
   render() {

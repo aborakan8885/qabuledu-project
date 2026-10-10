@@ -255,16 +255,26 @@ export default function Dashboard({
       const cached = localStorage.getItem('officer_users_v4');
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length >= DEMO_OFFICERS.length) return parsed;
       }
     } catch {}
     return DEMO_OFFICERS;
   });
 
-  // Strict persistence & auto-sync of officer users (protect Salem Al-Tarjami & custom staff)
+  // Strict persistence & auto-sync of officer users (protect Salem Al-Tarjami & 10 authentic staff)
   useEffect(() => {
-    saveOfficersToStorage(officers);
-    syncDataWithServer({ officers });
+    loadOfficersFromStorage().then(loaded => {
+      if (loaded && loaded.length >= DEMO_OFFICERS.length) {
+        setOfficers(loaded);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (officers.length >= DEMO_OFFICERS.length) {
+      saveOfficersToStorage(officers);
+      syncDataWithServer({ officers });
+    }
   }, [officers]);
   const [activeFeature, setActiveFeature] = useState<
     'requests' | 'equivalency_requests' | 'inquiries' | 'principal_reports' | 'sync' | 'settings' | 'placements' | 'staff' | 'feedback' | 'analytics' | 'alerts' | 'schools' | 'satisfaction' | 'reports' | 'principal_data'

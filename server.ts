@@ -120,15 +120,53 @@ async function startServer() {
   // =========================================================================
   const DATA_DIR = path.join(process.cwd(), "data");
   const STORAGE_FILE = path.join(DATA_DIR, "app_storage.json");
+  const MASTER_PROTECTED_FILE = path.join(DATA_DIR, "master_database_protected.json");
   const BACKUPS_DIR = path.join(DATA_DIR, "backups");
 
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   if (!fs.existsSync(BACKUPS_DIR)) fs.mkdirSync(BACKUPS_DIR, { recursive: true });
 
+  // Self-Healing Bootloader: Guarantee that 2940 schools and 10 officers are always present
+  try {
+    let currentStorage: any = null;
+    if (fs.existsSync(STORAGE_FILE)) {
+      try {
+        currentStorage = JSON.parse(fs.readFileSync(STORAGE_FILE, "utf-8"));
+      } catch {
+        currentStorage = null;
+      }
+    }
+
+    const currentSchoolsCount = Array.isArray(currentStorage?.schools) ? currentStorage.schools.length : 0;
+    const currentOfficersCount = Array.isArray(currentStorage?.officers) ? currentStorage.officers.length : 0;
+
+    if (fs.existsSync(MASTER_PROTECTED_FILE) && (currentSchoolsCount < 2940 || currentOfficersCount < 10)) {
+      const masterContent = JSON.parse(fs.readFileSync(MASTER_PROTECTED_FILE, "utf-8"));
+      const restored = {
+        ...(currentStorage || {}),
+        schools: masterContent.schools || [],
+        officers: masterContent.officers || [],
+        inquiries: masterContent.inquiries || [],
+        surveys: (currentStorage?.surveys?.length > 0) ? currentStorage.surveys : (masterContent.surveys || []),
+        principalReports: (currentStorage?.principalReports?.length > 0) ? currentStorage.principalReports : (masterContent.principalReports || []),
+        config: { ...(masterContent.config || {}), ...(currentStorage?.config || {}) },
+        lastSyncedAt: new Date().toISOString()
+      };
+      fs.writeFileSync(STORAGE_FILE, JSON.stringify(restored, null, 2), "utf-8");
+      console.log(`[Persistence Engine] Self-healed master database: ${restored.schools.length} schools and ${restored.officers.length} officers restored.`);
+    }
+  } catch (initErr) {
+    console.error("[Persistence Engine] Bootloader self-healing error:", initErr);
+  }
+
   // Endpoint: Retrieve latest synced data from server
   app.get("/api/sync/data", (_req, res): any => {
     try {
       if (!fs.existsSync(STORAGE_FILE)) {
+        if (fs.existsSync(MASTER_PROTECTED_FILE)) {
+          const rawMaster = fs.readFileSync(MASTER_PROTECTED_FILE, "utf-8");
+          return res.json({ success: true, exists: true, data: JSON.parse(rawMaster) });
+        }
         return res.json({ success: true, exists: false, data: null });
       }
       const raw = fs.readFileSync(STORAGE_FILE, "utf-8");
@@ -137,6 +175,38 @@ async function startServer() {
     } catch (err: any) {
       console.error("Error reading persistence store:", err);
       return res.status(500).json({ success: false, error: err?.message || "Sync read failed" });
+    }
+  });
+
+  // Dedicated Endpoint: Fast compressed retrieval of all schools
+  app.get("/api/schools", (_req, res): any => {
+    try {
+      const fileToRead = fs.existsSync(STORAGE_FILE) ? STORAGE_FILE : MASTER_PROTECTED_FILE;
+      if (fs.existsSync(fileToRead)) {
+        const raw = fs.readFileSync(fileToRead, "utf-8");
+        const parsed = JSON.parse(raw);
+        const list = Array.isArray(parsed?.schools) ? parsed.schools : [];
+        return res.json({ success: true, count: list.length, data: list });
+      }
+      return res.json({ success: true, count: 0, data: [] });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to fetch schools" });
+    }
+  });
+
+  // Dedicated Endpoint: Fast retrieval of official officers team
+  app.get("/api/officers", (_req, res): any => {
+    try {
+      const fileToRead = fs.existsSync(STORAGE_FILE) ? STORAGE_FILE : MASTER_PROTECTED_FILE;
+      if (fs.existsSync(fileToRead)) {
+        const raw = fs.readFileSync(fileToRead, "utf-8");
+        const parsed = JSON.parse(raw);
+        const list = Array.isArray(parsed?.officers) ? parsed.officers : [];
+        return res.json({ success: true, count: list.length, data: list });
+      }
+      return res.json({ success: true, count: 0, data: [] });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to fetch officers" });
     }
   });
 
@@ -155,6 +225,15 @@ async function startServer() {
         } catch {
           existingData = {};
         }
+      }
+
+      // If existingData has fewer than 2940 schools, fall back to master
+      if ((!existingData.schools || existingData.schools.length < 2940) && fs.existsSync(MASTER_PROTECTED_FILE)) {
+        try {
+          const master = JSON.parse(fs.readFileSync(MASTER_PROTECTED_FILE, "utf-8"));
+          if (Array.isArray(master.schools)) existingData.schools = master.schools;
+          if (Array.isArray(master.officers)) existingData.officers = master.officers;
+        } catch {}
       }
 
       const mergedData: any = {
@@ -179,39 +258,48 @@ async function startServer() {
         mergedData.inquiries = Array.from(inqMap.values());
       }
 
-      // 3. Schools: Merge by code/id, allow explicit admin clear only
-      if (Array.isArray(payload.schools)) {
-        if (payload.isExplicitAdminClear && payload.schools.length === 0) {
-          mergedData.schools = [];
-          mergedData.schoolsCleared = true;
-        } else if (payload.isExplicitAdminClear) {
-          mergedData.schools = payload.schools;
-          mergedData.schoolsCleared = false;
-        } else {
-          const schMap = new Map();
-          (existingData.schools || []).forEach((s: any) => {
-            const k = s.ministryCode || s.code || s.id;
-            if (k) schMap.set(k, s);
-          });
+      // 3. Schools: STRICT ANTI-LOSS RULE - Never allow downgrade or wiping of 2940 authentic records
+      const existingSchools: any[] = Array.isArray(existingData.schools) ? existingData.schools : [];
+      const schMap = new Map();
+      existingSchools.forEach((s: any) => {
+        const k = String(s.ministryCode || s.code || s.id || s.nameAr || '').trim();
+        if (k) schMap.set(k, s);
+      });
+
+      if (Array.isArray(payload.schools) && payload.schools.length > 0) {
+        // Detect if client accidentally sent dummy 11-item list
+        const isDummy11List = payload.schools.length <= 11 && payload.schools.some((s: any) => s.id === 'sch_101' || s.id === 'sch_40386');
+        if (!isDummy11List) {
           payload.schools.forEach((s: any) => {
-            const k = s.ministryCode || s.code || s.id;
+            const k = String(s.ministryCode || s.code || s.id || s.nameAr || '').trim();
             if (k) {
               const ex = schMap.get(k);
               schMap.set(k, ex ? { ...ex, ...s } : s);
             }
           });
-          mergedData.schools = Array.from(schMap.values());
-          mergedData.schoolsCleared = false;
         }
       }
+      mergedData.schools = Array.from(schMap.values());
+      mergedData.schoolsCleared = false;
 
-      // 4. Officers: Merge by ID and preserve admin Salem
-      if (Array.isArray(payload.officers)) {
-        const offMap = new Map();
-        (existingData.officers || []).forEach((o: any) => { if (o && o.id) offMap.set(o.id, o); });
-        payload.officers.forEach((o: any) => { if (o && o.id) offMap.set(o.id, o); });
-        mergedData.officers = Array.from(offMap.values());
+      // 4. Officers: STRICT ANTI-LOSS RULE - Never drop 10 authentic staff members & Salem
+      const existingOfficers: any[] = Array.isArray(existingData.officers) ? existingData.officers : [];
+      const offMap = new Map();
+      existingOfficers.forEach((o: any) => {
+        const k = String(o.id || o.nationalId || o.nameAr || '').trim();
+        if (k) offMap.set(k, o);
+      });
+
+      if (Array.isArray(payload.officers) && payload.officers.length > 0) {
+        payload.officers.forEach((o: any) => {
+          const k = String(o.id || o.nationalId || o.nameAr || '').trim();
+          if (k) {
+            const ex = offMap.get(k);
+            offMap.set(k, ex ? { ...ex, ...o } : o);
+          }
+        });
       }
+      mergedData.officers = Array.from(offMap.values());
 
       // 5. Principal Reports: Merge
       if (Array.isArray(payload.principalReports)) {
@@ -231,6 +319,11 @@ async function startServer() {
       fs.writeFileSync(tempFile, JSON.stringify(mergedData, null, 2), "utf-8");
       fs.renameSync(tempFile, STORAGE_FILE);
 
+      // Keep master protected database updated whenever count is >= 2940
+      if (mergedData.schools.length >= 2940) {
+        fs.writeFileSync(MASTER_PROTECTED_FILE, JSON.stringify(mergedData, null, 2), "utf-8");
+      }
+
       // Hourly snapshot for disaster recovery
       const snapshotName = `snapshot_${new Date().toISOString().slice(0, 13)}.json`;
       const snapshotPath = path.join(BACKUPS_DIR, snapshotName);
@@ -241,6 +334,8 @@ async function startServer() {
       return res.json({
         success: true,
         message: "تم حفظ ومزامنة البيانات في خادم المنصة وحمايتها من أي فقدان بنجاح",
+        schoolsCount: mergedData.schools.length,
+        officersCount: mergedData.officers.length,
         lastSyncedAt: mergedData.lastSyncedAt
       });
     } catch (err: any) {

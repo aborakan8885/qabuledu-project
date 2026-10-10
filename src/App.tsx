@@ -324,15 +324,6 @@ export default function App() {
   };
 
   const [schoolsList, setSchoolsList] = useState<SchoolItem[]>(() => {
-    const isCleared = localStorage.getItem('app_schools_cleared');
-    if (isCleared === 'true') return [];
-    const cached = localStorage.getItem('app_schools_list_v1');
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch { /* ignore */ }
-    }
     return INITIAL_SCHOOLS;
   });
 
@@ -421,31 +412,33 @@ export default function App() {
       });
 
       // 3. Schools & Principals: Strict protection of uploaded records
-      const isCleared = localStorage.getItem('app_schools_cleared') === 'true' || serverData?.schoolsCleared === true;
-      if (isCleared) {
-        setSchoolsList([]);
-      } else {
-        const schMap = new Map<string, SchoolItem>();
-        (schoolsData || []).forEach(s => {
+      // 3. Schools & Principals: Strict protection of authentic 2940 records
+      const schMap = new Map<string, SchoolItem>();
+      // Always seed with INITIAL_SCHOOLS (master 2940 schools)
+      INITIAL_SCHOOLS.forEach(s => {
+        const k = s.ministryCode || s.code || s.id || s.nameAr;
+        if (k) schMap.set(String(k).trim(), s);
+      });
+      // Merge IndexedDB schools if any
+      (schoolsData || []).forEach(s => {
+        const k = s.ministryCode || s.code || s.id || s.nameAr;
+        if (k) {
+          const ex = schMap.get(String(k).trim());
+          schMap.set(String(k).trim(), ex ? { ...ex, ...s } : s);
+        }
+      });
+      // Merge server schools
+      if (serverData?.schools && Array.isArray(serverData.schools) && serverData.schools.length > 0) {
+        serverData.schools.forEach((s: SchoolItem) => {
           const k = s.ministryCode || s.code || s.id || s.nameAr;
-          if (k) schMap.set(String(k).trim(), s);
+          if (k) {
+            const ex = schMap.get(String(k).trim());
+            schMap.set(String(k).trim(), ex ? { ...ex, ...s } : s);
+          }
         });
-        if (serverData?.schools && Array.isArray(serverData.schools)) {
-          serverData.schools.forEach((s: SchoolItem) => {
-            const k = s.ministryCode || s.code || s.id || s.nameAr;
-            if (k) {
-              const ex = schMap.get(String(k).trim());
-              schMap.set(String(k).trim(), ex ? { ...ex, ...s } : s);
-            }
-          });
-        }
-        const resolvedSchools = Array.from(schMap.values());
-        if (resolvedSchools.length > 0) {
-          setSchoolsList(resolvedSchools);
-        } else {
-          setSchoolsList(prev => (prev && prev.length > 0 ? prev : INITIAL_SCHOOLS));
-        }
       }
+      const resolvedSchools = Array.from(schMap.values());
+      setSchoolsList(resolvedSchools);
 
       // 4. Inquiries: Merge server inquiries if available
       if (serverData?.inquiries && Array.isArray(serverData.inquiries) && serverData.inquiries.length > 0) {
@@ -480,13 +473,14 @@ export default function App() {
 
   useEffect(() => {
     if (!isInitialLoaded) return;
+    if (schoolsList.length < 2940) return; // Strict Anti-Downgrade: never sync truncated list!
     const timer = setTimeout(() => {
-      saveSchoolsToStorage(schoolsList, { isConfirmedAdminClear: true });
+      saveSchoolsToStorage(schoolsList);
       syncDataWithServer({ 
         schools: schoolsList, 
-        isExplicitAdminClear: localStorage.getItem('app_schools_cleared') === 'true' 
+        isExplicitAdminClear: false 
       });
-    }, 1500);
+    }, 2000);
     return () => clearTimeout(timer);
   }, [schoolsList, isInitialLoaded]);
 

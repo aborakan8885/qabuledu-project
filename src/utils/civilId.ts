@@ -1,7 +1,4 @@
-/**
- * Utility functions for extracting, normalizing, and comparing Saudi Civil IDs / National IDs
- * across uploaded Excel/CSV files and user input, with special support for the column 'هوية مدير المدرسة'.
- */
+import masterSchoolsData from '../data/masterSchoolsData.json';
 
 export const cleanDigitsString = (str: any): string => {
   if (str === null || str === undefined) return '';
@@ -194,15 +191,10 @@ export const findSchoolsByPrincipalCivilId = (enteredCivilId: string, schoolsLis
     schoolsList.forEach(addSchoolToPool);
   }
 
-  try {
-    const cached = localStorage.getItem('app_schools_list_v1');
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed)) {
-        parsed.forEach(addSchoolToPool);
-      }
-    }
-  } catch { /* ignore */ }
+  // Always seed pool with authentic master schools database (2940 schools)
+  if (Array.isArray(masterSchoolsData)) {
+    (masterSchoolsData as any[]).forEach(addSchoolToPool);
+  }
 
   if (pool.length === 0) return [];
 
