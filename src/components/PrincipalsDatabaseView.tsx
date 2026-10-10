@@ -388,8 +388,8 @@ export const PrincipalsDatabaseView: React.FC<PrincipalsDatabaseViewProps> = ({
       return item;
     });
 
-    if (importMode === 'replace') {
-      onUpdateSchools(newSchoolsList);
+    if (importMode === 'replace' && isSystemAdmin(activeOfficer)) {
+      (onUpdateSchools as any)(newSchoolsList, true);
       showToast(`تم استبدال وحفظ بيانات ${newSchoolsList.length} مدرسة ومدير بنجاح!`, 'success');
     } else {
       // Merge mode: Match by ministry code or name
@@ -698,248 +698,8 @@ export const PrincipalsDatabaseView: React.FC<PrincipalsDatabaseViewProps> = ({
         className="hidden" 
       />
 
-      {/* 1. HERO HEADER BANNER */}
-      <div className={`p-6 sm:p-8 rounded-[32px] border relative overflow-hidden shadow-sm ${
-        isDark 
-          ? 'bg-[#081e2b] border-teal-800/30 text-white' 
-          : 'bg-linear-to-r from-emerald-900 via-teal-900 to-slate-900 text-white border-teal-800/20'
-      }`}>
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-3 max-w-3xl">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-black tracking-wide uppercase flex items-center gap-1.5">
-                <Database className="w-3.5 h-3.5" />
-                سجل القيادات المدرسية والربط الوزاري
-              </span>
-              <span className="px-3 py-1 rounded-full bg-teal-500/20 text-teal-300 border border-teal-400/30 text-[10px] font-black">
-                عمود: السجل المدني (10 أرقام)
-              </span>
-            </div>
-            
-            <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-white flex items-center gap-3 tracking-tight">
-              <Users className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-400 shrink-0" />
-              بيانات مديري المدارس والربط بالسجل المدني
-            </h1>
-            
-            <p className="text-xs sm:text-sm font-bold text-teal-100/85 leading-relaxed">
-              إدارة ورفع ملفات الإكسل (Excel / CSV) لمديري المدارس والمدارس المرتبطة بهم. عند قيام أي مدير بتسجيل مدرسة جديدة أو تسجيل الدخول، يتعرف النظام تلقائياً على مدارسه عبر مطابقة <strong>رقم السجل المدني</strong> في عمود <strong>(السجل المدني)</strong>.
-            </p>
-          </div>
-
-          {/* Quick Action Buttons on Header */}
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isParsing}
-              className="px-4 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-black text-xs flex items-center gap-2 shadow-lg shadow-emerald-900/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-            >
-              {isParsing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              <span>رفع ملف إكسل المدراء (.xlsx)</span>
-            </button>
-
-            <button
-              onClick={handleDownloadTemplate}
-              className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-2xl font-black text-xs flex items-center gap-2 backdrop-blur-md transition-all hover:scale-105 active:scale-95 cursor-pointer"
-            >
-              <Download className="w-4 h-4 text-amber-300" />
-              <span>تحميل قالب Excel معتمد</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. STATS CARDS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Unique Principals */}
-        <div className={`p-5 rounded-2xl border transition-all ${
-          isDark ? 'bg-[#081e2b] border-teal-800/20' : 'bg-white border-slate-100 shadow-xs'
-        }`}>
-          <div className="flex items-center justify-between">
-            <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center">
-              <Users className="w-5 h-5" />
-            </div>
-            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
-              هويات فريدة
-            </span>
-          </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {stats.uniquePrincipals}
-            </div>
-            <div className="text-xs font-bold text-slate-400 mt-0.5">
-              إجمالي مديري المدارس المسجلين
-            </div>
-          </div>
-        </div>
-
-        {/* Card 2: Schools with Civil ID */}
-        <div className={`p-5 rounded-2xl border transition-all ${
-          isDark ? 'bg-[#081e2b] border-teal-800/20' : 'bg-white border-slate-100 shadow-xs'
-        }`}>
-          <div className="flex items-center justify-between">
-            <div className="w-11 h-11 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 flex items-center justify-center">
-              <CheckCircle className="w-5 h-5" />
-            </div>
-            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300">
-              ربط فوري {stats.completionRate}%
-            </span>
-          </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {stats.withIdCount}
-            </div>
-            <div className="text-xs font-bold text-slate-400 mt-0.5">
-              مدارس مرتبطة برقم السجل المدني
-            </div>
-          </div>
-        </div>
-
-        {/* Card 3: Total Schools in Directory */}
-        <div className={`p-5 rounded-2xl border transition-all ${
-          isDark ? 'bg-[#081e2b] border-teal-800/20' : 'bg-white border-slate-100 shadow-xs'
-        }`}>
-          <div className="flex items-center justify-between">
-            <div className="w-11 h-11 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 flex items-center justify-center">
-              <School className="w-5 h-5" />
-            </div>
-            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
-              الدليل العام
-            </span>
-          </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {stats.totalSchools}
-            </div>
-            <div className="text-xs font-bold text-slate-400 mt-0.5">
-              إجمالي المدارس في النظام
-            </div>
-          </div>
-        </div>
-
-        {/* Card 4: Missing ID */}
-        <div className={`p-5 rounded-2xl border transition-all ${
-          isDark ? 'bg-[#081e2b] border-teal-800/20' : 'bg-white border-slate-100 shadow-xs'
-        }`}>
-          <div className="flex items-center justify-between">
-            <div className="w-11 h-11 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center">
-              <AlertCircle className="w-5 h-5" />
-            </div>
-            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
-              تتطلب تحديث
-            </span>
-          </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black text-amber-600 dark:text-amber-400 font-mono">
-              {stats.withoutIdCount}
-            </div>
-            <div className="text-xs font-bold text-slate-400 mt-0.5">
-              مدارس بدون رقم سجل مدني
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. INTERACTIVE CIVIL ID LOOKUP SIMULATOR & TEST TOOL */}
-      <div className={`p-5 sm:p-6 rounded-2xl border ${
-        isDark ? 'bg-[#092535] border-teal-800/30' : 'bg-slate-50 border-slate-200'
-      }`}>
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200/60 dark:border-teal-800/20">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
-                أداة محاكاة وفحص استدعاء السجل المدني لمدير المدرسة
-                <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500 text-white font-bold">10 أرقام</span>
-              </h2>
-              <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                أدخل أي رقم سجل مدني (10 أرقام) لتتأكد من المدارس والبيانات التي ستظهر له تلقائياً فور إدخال سجله المدني في شاشة تسجيل المدرسة.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={testCivilId}
-              onChange={(e) => {
-                setTestCivilId(e.target.value);
-                setTestResult(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleRunCivilIdTest();
-              }}
-              placeholder="أدخل رقم السجل المدني (مثال: 1052889670)..."
-              className={`w-64 px-4 py-2 text-xs font-mono font-bold rounded-xl border outline-none ${
-                isDark ? 'bg-slate-900 border-teal-800/60 text-white' : 'bg-white border-slate-300 text-slate-900'
-              }`}
-            />
-            <button
-              onClick={handleRunCivilIdTest}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-            >
-              <Search className="w-4 h-4" />
-              <span>فحص الاستدعاء</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Test Result Display */}
-        {testResult && testResult.searched && (
-          <div className="mt-4 pt-2">
-            {testResult.found.length > 0 ? (
-              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 space-y-3">
-                <div className="flex items-center justify-between text-xs font-black text-emerald-800 dark:text-emerald-300">
-                  <span className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    تم العثور على ({testResult.found.length}) مدرسة مرتبطة برقم السجل المدني: <code className="font-mono bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 rounded">{testResult.rawId}</code>
-                  </span>
-                  <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
-                    جاهز للربط والتسجيل الفوري
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {testResult.found.map((sch, i) => {
-                    const info = extractPrincipalInfoFromSchool(sch);
-                    return (
-                      <div key={i} className={`p-3 rounded-xl border ${isDark ? 'bg-slate-900/80 border-emerald-800/40' : 'bg-white border-emerald-200'} text-xs space-y-1.5`}>
-                        <div className="font-black text-slate-900 dark:text-white flex items-center gap-1.5">
-                          <School className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>{sch.nameAr || sch.name}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-                          <span>الرقم الوزاري: <b className="font-mono text-teal-600">{sch.ministryCode || sch.code}</b></span>
-                          <span>المدير: <b className="text-slate-800 dark:text-slate-200">{info.name}</b></span>
-                        </div>
-                        {info.mobile && (
-                          <div className="text-[10px] text-slate-400 flex items-center gap-1 font-mono">
-                            <Phone className="w-3 h-3 text-slate-400" />
-                            <span>{info.mobile}</span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : (
-              <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs font-black text-rose-700 dark:text-rose-300 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
-                <span>لم يتم العثور على أي مدرسة مرتبطة برقم السجل المدني ({testResult.rawId}). يرجى التأكد من رفع ملف الإكسل الذي يحتوي على هذا السجل في عمود (السجل المدني) أو إضافته يدوياً.</span>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* 4. MAIN TABLE CONTAINER & CONTROLS */}
-      <div className={`p-6 rounded-[32px] border ${
-        isDark ? 'bg-[#081e2b] border-teal-800/20' : 'bg-white border-slate-100 shadow-xs'
-      } space-y-5`}>
-        
-        {/* Table Top Controls */}
+      {/* Table Top Controls */}
+      <div className="p-6 rounded-[32px] border bg-white dark:bg-[#081e2b] border-slate-200 dark:border-teal-800/30 shadow-sm space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           {/* Search Box */}
           <div className="relative flex-1">
@@ -1010,7 +770,8 @@ export const PrincipalsDatabaseView: React.FC<PrincipalsDatabaseViewProps> = ({
             </select>
 
             {/* Export Button */}
-            <button
+            {isSystemAdmin(activeOfficer) && (
+              <button
               onClick={handleExportCurrentData}
               className={`px-3.5 py-2 rounded-xl text-xs font-black border flex items-center gap-1.5 transition-all cursor-pointer ${
                 isDark ? 'bg-slate-900 border-teal-800/40 text-slate-200 hover:bg-slate-800' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -1020,6 +781,7 @@ export const PrincipalsDatabaseView: React.FC<PrincipalsDatabaseViewProps> = ({
               <Download className="w-3.5 h-3.5 text-emerald-600" />
               <span>تصدير Excel</span>
             </button>
+            )}
 
             {/* Add School Manually */}
             <button
@@ -1174,6 +936,10 @@ export const PrincipalsDatabaseView: React.FC<PrincipalsDatabaseViewProps> = ({
                         {onDeleteSchool && (
                           <button
                             onClick={() => {
+                              if (!isSystemAdmin(activeOfficer)) {
+                                alert('عذراً، حذف المدارس مقتصر حصرياً على مدير النظام (الأدمن) أ. سالم محمد الترجمي.');
+                                return;
+                              }
                               if (confirm(`هل أنت متأكد من حذف مدرسة (${school.displayName})؟`)) {
                                 onDeleteSchool(school.id);
                                 showToast('تم حذف المدرسة بنجاح', 'info');
@@ -1283,6 +1049,7 @@ export const PrincipalsDatabaseView: React.FC<PrincipalsDatabaseViewProps> = ({
             </div>
 
             {/* Import Mode Selector */}
+            {isSystemAdmin(activeOfficer) ? (
             <div className="space-y-2">
               <label className="text-xs font-black text-slate-700 dark:text-slate-300">اختر طريقة حفظ البيانات في النظام:</label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1313,12 +1080,17 @@ export const PrincipalsDatabaseView: React.FC<PrincipalsDatabaseViewProps> = ({
                     className="mt-1 accent-emerald-600"
                   />
                   <div>
-                    <div className="text-xs font-black text-slate-900 dark:text-white">استبدال كامل السجلات بالملف الجديد</div>
+                    <div className="text-xs font-black text-slate-900 dark:text-white">استبدال كامل السجلات بالملف الجديد (الأدمن فقط)</div>
                     <p className="text-[11px] font-bold text-slate-400 mt-0.5">مسح الدليل الحالي واعتماد المدارس والمدراء الموجودين في هذا الملف فقط.</p>
                   </div>
                 </label>
               </div>
             </div>
+            ) : (
+            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-xs font-bold text-amber-800 dark:text-amber-300">
+              🔒 يتم تلقائياً دمج وتحديث المدارس والبيانات السابقة وحمايتها من الحذف (الحذف والاستبدال محصور بحساب الأدمن فقط).
+            </div>
+            )}
 
             {/* Preview Table of First 15 Rows */}
             <div className="space-y-2">

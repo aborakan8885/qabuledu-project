@@ -75,7 +75,7 @@ export default function ContactFeedbackModal({
             </div>
             <div>
               <h3 className="text-base sm:text-lg font-black leading-tight text-white">
-                للتواصل وإبداء الملاحظات
+                تواصل المبرمج والدعم الفني
               </h3>
               <p className="text-[11px] text-cyan-100 font-medium">
                 يسعدنا استقبال ملاحظاتكم ومقترحاتكم والتواصل المباشر مع دعم النظام

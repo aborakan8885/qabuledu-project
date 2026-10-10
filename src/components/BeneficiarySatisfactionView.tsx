@@ -427,65 +427,6 @@ export default function BeneficiarySatisfactionView({
   return (
     <div className="space-y-8 animate-fade-in dir-rtl" style={{ direction: 'rtl' }}>
       
-      {/* 1. Grand Header Banner */}
-      <div className={`p-6 sm:p-8 rounded-3xl border shadow-xl transition-all relative overflow-hidden ${
-        isDark 
-          ? 'bg-gradient-to-r from-[#0b2336] via-[#10304a] to-[#081f2f] border-amber-500/40 text-white' 
-          : 'bg-gradient-to-r from-amber-600 via-amber-700 to-yellow-700 border-amber-500 text-white shadow-amber-900/10'
-      }`}>
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 relative z-10">
-          <div className="flex items-start sm:items-center gap-4">
-            <div className="p-3.5 bg-white/15 rounded-2xl border border-white/20 backdrop-blur-md shadow-md text-amber-300">
-              <Award className="w-9 h-9 animate-pulse" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 rounded-full text-[11px] font-black bg-amber-400 text-slate-950 shadow-xs">
-                  ⭐ منظومة حوكمة قياس رضا المستفيدين
-                </span>
-                <span className="text-xs text-amber-100 font-bold">• تقارير الجودة ورعاية أولياء الأمور</span>
-              </div>
-              <h1 className="text-2xl sm:text-3xl font-black text-white mt-1.5 flex items-center gap-2.5">
-                <span>قياس رضا المستفيدين</span>
-                <span className="text-base font-bold bg-white/20 px-3 py-0.5 rounded-xl">
-                  {stats.avgOverall} / 5 ({stats.overallPct}%)
-                </span>
-              </h1>
-              <p className="text-xs sm:text-sm text-amber-100 font-medium mt-1 max-w-2xl leading-relaxed">
-                لوحة تحكم إشرافية موحدة لتحليل تقييمات أولياء الأمور، تصنيف الرضا وفق جنس الطلاب (بنين / بنات)، والملاحظات المباشرة.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-            <button
-              onClick={handleOpenSatisfactionOfficialReport}
-              className="px-5 py-3 bg-gradient-to-r from-amber-400 to-yellow-300 hover:from-amber-300 hover:to-yellow-200 text-slate-950 font-black text-xs sm:text-sm rounded-2xl shadow-xl transition-all cursor-pointer flex items-center gap-2 active:scale-95 border border-amber-200"
-            >
-              <FileText className="w-4.5 h-4.5 text-slate-950" />
-              <span>استخراج تقرير الرضا (PDF / Word / Excel) 📑</span>
-            </button>
-            <button
-              onClick={handleExportExcel}
-              className="px-4 py-3 bg-white/20 hover:bg-white/30 text-white font-bold text-xs sm:text-sm rounded-2xl shadow-md transition-all cursor-pointer flex items-center gap-2 active:scale-95 border border-white/30"
-            >
-              <Download className="w-4 h-4 text-white" />
-              <span>إكسل سريع</span>
-            </button>
-            <button
-              onClick={handleOpenSatisfactionOfficialReport}
-              className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-2xl border border-white/20 shadow-md transition-all cursor-pointer flex items-center gap-2"
-            >
-              <Printer className="w-4 h-4 text-amber-200" />
-              <span>معاينة رسمية 🖨️</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Decorative background glow */}
-        <div className="absolute top-0 left-0 w-96 h-96 bg-amber-400/10 rounded-full blur-3xl pointer-events-none -translate-x-1/2 -translate-y-1/2" />
-      </div>
-
       {/* 2. Primary KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         

@@ -239,7 +239,7 @@ export interface PrincipalReport {
   archivedBy?: string;
 }
 
-export type OfficerRole = 'admin' | 'director' | 'supervisor' | 'school_planning' | 'school_leadership' | 'stage_supervisor' | 'returned_followup' | 'leadership_director' | 'equivalency_supervisor';
+export type OfficerRole = 'admin' | 'director' | 'supervisor' | 'school_planning' | 'school_leadership' | 'stage_supervisor' | 'returned_followup' | 'leadership_director' | 'equivalency_supervisor' | 'manager_admission_unit' | 'tech_support_supervisor' | 'equivalency_supervisor' | 'planning_vacancy_supervisor' | 'primary_school_supervisor' | 'intermediate_school_supervisor' | 'secondary_school_supervisor' | 'early_childhood_official' | 'kindergarten_official';
 
 export interface OfficerUser {
   id: string;
@@ -263,6 +263,33 @@ export interface OfficerUser {
   personalEmail?: string; // البريد الإلكتروني الشخصي (وليس الرسمي)
   mustChangePassword?: boolean; // هل يجب تعيين كلمة مرور جديدة وتأكيدها عند أول دخول
   fullNameQuad?: string; // الاسم الرباعي للمستخدم
+  tasks?: string; // المهام
+  permissions?: UserPermissions; // الصلاحيات
+}
+
+export interface UserPermissions {
+  canViewInquiries?: boolean;
+  canViewGeneralInquiries?: boolean;
+  canViewEquivalencyRequests?: boolean;
+  canViewSchoolTransfers?: boolean;
+  canViewSettings?: boolean;
+  canViewSync?: boolean;
+  canViewDashboard?: boolean;
+  canViewFeedback?: boolean;
+  canViewStaff?: boolean;
+  canViewSchools?: boolean;
+  canViewAlerts?: boolean;
+  canViewPrincipalData?: boolean;
+  // New Permissions
+  canTrackNewRegistrationRequests?: boolean;
+  canTrackSchoolTransferRequests?: boolean;
+  canTrackEquivalencyRequests?: boolean;
+  canTrackVacancyReferrals?: boolean;
+  canTrackPlacementPrimary?: boolean;
+  canTrackPlacementIntermediate?: boolean;
+  canTrackPlacementSecondary?: boolean;
+  canTrackPlacementEarlyChildhood?: boolean;
+  canTrackPlacementKindergarten?: boolean;
 }
 
 /**

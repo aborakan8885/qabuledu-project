@@ -35,7 +35,7 @@ import {
   TRANSLATIONS
 } from './data/mockData';
 import { processSurveysInBatchAsync } from './utils/batchProcessor';
-import { ShieldCheck, Wifi, Info, CheckCircle2, ChevronRight, HelpCircle, Cpu, Zap, Activity, MessageSquareHeart, Home, RotateCcw, Loader2 } from 'lucide-react';
+import { ShieldCheck, Wifi, Info, CheckCircle2, ChevronRight, HelpCircle, Cpu, Zap, Activity, MessageSquareHeart, Home, RotateCcw, Loader2, Code2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -334,10 +334,33 @@ export default function App() {
 
   const [isInitialLoaded, setIsInitialLoaded] = useState<boolean>(false);
 
-  const handleUpdateSchools = (newList: SchoolItem[]) => {
+  const handleUpdateSchools = (newList: SchoolItem[], isExplicitAdminClear?: boolean) => {
     if (!newList || !Array.isArray(newList)) return;
-    setSchoolsList(newList);
-    saveSchoolsToStorage(newList, { isConfirmedAdminClear: true });
+    if (isExplicitAdminClear) {
+      setSchoolsList(newList);
+      saveSchoolsToStorage(newList, { isConfirmedAdminClear: true });
+      return;
+    }
+    // حماية صارمة: دمج وتحديث المدارس والارقام الوزارية وبيانات المديرين دون حذف البيانات السابقة
+    setSchoolsList(prev => {
+      const mergedMap = new Map<string, SchoolItem>();
+      (prev || []).forEach(s => {
+        const key = s.ministryCode || s.code || s.id || s.nameAr;
+        if (key) mergedMap.set(String(key).trim(), s);
+      });
+      newList.forEach(s => {
+        const key = s.ministryCode || s.code || s.id || s.nameAr;
+        if (key) {
+          const existing = mergedMap.get(String(key).trim());
+          mergedMap.set(String(key).trim(), existing ? { ...existing, ...s } : s);
+        } else if (s.id) {
+          mergedMap.set(s.id, s);
+        }
+      });
+      const merged = Array.from(mergedMap.values());
+      saveSchoolsToStorage(merged, { isConfirmedAdminClear: true });
+      return merged;
+    });
   };
 
   const [alertToast, setAlertToast] = useState<{ message: string; type: 'success' | 'info' | 'warning' } | null>(null);
@@ -746,43 +769,86 @@ export default function App() {
         isRtl={currentLang === 'ar'}
       />
       
-      {/* Floating Action Buttons Matching Requested Adjustments */}
-      {/* 1. Right Side: Back to Main Gateway (الرئيسية) */}
-      {(userRole !== 'portal' || portalView !== 'selection') && (
-        <button
-          onClick={handleReturnToMainGateway}
-          className="fixed bottom-4 right-4 z-40 bg-[#16222f]/95 hover:bg-[#1f2f42] text-white font-black text-sm sm:text-base px-4.5 py-3 sm:px-5 sm:py-3.5 rounded-2xl shadow-2xl border border-slate-700/80 flex items-center gap-2.5 transition-all duration-300 active:scale-95 cursor-pointer backdrop-blur-md"
-          title={currentLang === 'ar' ? 'الشاشة الرئيسية' : 'Home Page'}
-          id="floating-home-btn"
-        >
-          <span>{currentLang === 'ar' ? 'الرئيسية' : 'Home'}</span>
-          <Home className="w-5.5 h-5.5 sm:w-6 sm:h-6 text-emerald-400 stroke-[2.2]" />
-        </button>
-      )}
-
-      {/* 2. Left Side Group: "تواصل معنا" and "الخلف" side-by-side (Back on the right of Contact Us, aligned with Home) */}
-      <div className="fixed bottom-4 left-4 z-40 flex items-center gap-2 sm:gap-2.5 [direction:ltr]">
-        {/* Leftmost: Contact Feedback Button (تواصل معنا) - Compact White Style */}
+      {/* شريط الأزرار والتنقل المتجاوب - تم تصميمه ليناسب الجوال وشاشات الكمبيوتر دون أن يحجب المحتوى */}
+      {/* 1. شريط الجوال المنظم بأسفل الشاشة (Mobile Bottom Dock) */}
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#081e2b]/95 backdrop-blur-md border-t border-slate-200/90 dark:border-teal-800/40 px-3 py-2 flex items-center justify-between gap-2 shadow-2xl">
+        {/* زر تواصل مع المبرمج للجوال */}
         <button
           onClick={() => setIsFeedbackModalOpen(true)}
-          className="bg-white/95 hover:bg-slate-50 text-slate-800 dark:bg-slate-100 dark:hover:bg-white font-bold text-xs sm:text-xs px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl shadow-lg border border-slate-200/90 dark:border-slate-300 flex items-center gap-1.5 transition-all duration-200 active:scale-95 cursor-pointer backdrop-blur-md hover:shadow-xl"
-          title={currentLang === 'ar' ? 'للتواصل وإبداء الملاحظات' : 'Contact & Feedback'}
-          id="floating-contact-btn"
+          className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-700 text-slate-800 dark:text-white font-black text-xs px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 cursor-pointer select-none shrink-0"
+          title={currentLang === 'ar' ? 'تواصل مع المبرمج' : 'Contact Developer'}
+          id="mobile-contact-btn"
         >
-          <MessageSquareHeart className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-teal-600 shrink-0" />
-          <span>{currentLang === 'ar' ? 'تواصل معنا' : 'Contact Us'}</span>
+          <Code2 className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+          <span className="text-[11px]">{currentLang === 'ar' ? 'تواصل مع المبرمج' : 'Developer'}</span>
         </button>
 
-        {/* Right of Contact Us: Go Back Button (الخلف) */}
+        <div className="flex items-center gap-2">
+          {/* زر الرجوع للخلف للجوال */}
+          {(userRole !== 'portal' || portalView !== 'selection' || historyStackRef.current.length > 0) && (
+            <button
+              onClick={handleGoBack}
+              className="bg-[#16222f] hover:bg-[#1f2f42] text-white font-black text-xs px-3 py-1.5 rounded-xl shadow-xs border border-slate-700 flex items-center gap-1 cursor-pointer select-none"
+              title={currentLang === 'ar' ? 'الرجوع للخلف' : 'Go Back'}
+              id="mobile-back-btn"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-cyan-300" />
+              <span className="text-[11px]">{currentLang === 'ar' ? 'الخلف' : 'Back'}</span>
+            </button>
+          )}
+
+          {/* زر الرئيسية للجوال */}
+          {(userRole !== 'portal' || portalView !== 'selection') && (
+            <button
+              onClick={handleReturnToMainGateway}
+              className="bg-teal-600 hover:bg-teal-700 text-white font-black text-xs px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1 cursor-pointer select-none"
+              title={currentLang === 'ar' ? 'الشاشة الرئيسية' : 'Home Page'}
+              id="mobile-home-btn"
+            >
+              <Home className="w-3.5 h-3.5 text-emerald-200" />
+              <span className="text-[11px]">{currentLang === 'ar' ? 'الرئيسية' : 'Home'}</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 2. أزرار سطح المكتب المثبتة بالزوايا دون حجب المحتوى (Desktop Floating Buttons) */}
+      <div className="hidden sm:block">
+        {/* زر تواصل مع المبرمج لسطح المكتب */}
+        <button
+          onClick={() => setIsFeedbackModalOpen(true)}
+          className="fixed bottom-4 left-4 z-50 bg-white dark:bg-slate-900 text-slate-800 dark:text-white font-black text-xs px-3.5 py-2.5 rounded-xl shadow-lg border border-slate-200/90 dark:border-slate-700 flex items-center gap-2 cursor-pointer select-none"
+          style={{ transform: 'none', transition: 'none' }}
+          title={currentLang === 'ar' ? 'تواصل مع المبرمج' : 'Contact Developer'}
+          id="floating-contact-btn"
+        >
+          <Code2 className="w-4 h-4 text-teal-600 shrink-0" />
+          <span>{currentLang === 'ar' ? 'تواصل مع المبرمج' : 'Contact Developer'}</span>
+        </button>
+
+        {/* زر الرجوع للخلف لسطح المكتب */}
         {(userRole !== 'portal' || portalView !== 'selection' || historyStackRef.current.length > 0) && (
           <button
             onClick={handleGoBack}
-            className="bg-[#16222f]/95 hover:bg-[#1f2f42] text-white font-black text-sm sm:text-base px-4.5 py-3 sm:px-5 sm:py-3.5 rounded-2xl shadow-2xl border border-slate-700/80 flex items-center gap-2.5 transition-all duration-300 active:scale-95 cursor-pointer backdrop-blur-md"
+            className="fixed bottom-4 left-[175px] z-40 bg-[#16222f]/95 hover:bg-[#1f2f42] text-white font-black text-xs sm:text-sm px-3.5 py-2.5 rounded-xl shadow-2xl border border-slate-700/80 flex items-center gap-2 cursor-pointer backdrop-blur-md select-none"
             title={currentLang === 'ar' ? 'الرجوع للخلف' : 'Go Back'}
             id="floating-back-btn"
           >
             <span>{currentLang === 'ar' ? 'الخلف' : 'Back'}</span>
-            <RotateCcw className="w-5.5 h-5.5 sm:w-6 sm:h-6 text-cyan-300 stroke-[2.2]" />
+            <RotateCcw className="w-4 h-4 text-cyan-300 stroke-[2.2]" />
+          </button>
+        )}
+
+        {/* زر الرئيسية لسطح المكتب */}
+        {(userRole !== 'portal' || portalView !== 'selection') && (
+          <button
+            onClick={handleReturnToMainGateway}
+            className="fixed bottom-4 right-4 z-40 bg-[#16222f]/95 hover:bg-[#1f2f42] text-white font-black text-sm sm:text-base px-4.5 py-3 sm:px-5 sm:py-3.5 rounded-2xl shadow-2xl border border-slate-700/80 flex items-center gap-2.5 cursor-pointer backdrop-blur-md"
+            title={currentLang === 'ar' ? 'الشاشة الرئيسية' : 'Home Page'}
+            id="floating-home-btn"
+          >
+            <span>{currentLang === 'ar' ? 'الرئيسية' : 'Home'}</span>
+            <Home className="w-5.5 h-5.5 sm:w-6 sm:h-6 text-emerald-400 stroke-[2.2]" />
           </button>
         )}
       </div>

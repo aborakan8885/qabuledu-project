@@ -1,0 +1,6 @@
+                          <button 
+                            onClick={() => setEditingOfficer(officer)}
+                            className="w-full py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-xl text-xs font-black cursor-pointer transition-all"
+                          >
+                             بيانات الموظف
+                          </button>

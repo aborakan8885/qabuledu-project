@@ -1,4 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
+import AddUserModal from './AddUserModal';
+import UserDetailModal from './UserDetailModal';
 import { RequestDispatchTimeline } from './RequestDispatchTimeline';
 import { checkRequestDelayStatus, getDelayedRequests } from '../utils/delayUtils';
 import { 
@@ -106,10 +108,32 @@ import BeneficiarySatisfactionView from './BeneficiarySatisfactionView';
 import BeneficiaryFeedbackView from './BeneficiaryFeedbackView';
 import AdmissionInquiriesView from './AdmissionInquiriesView';
 import PrincipalsDatabaseView from './PrincipalsDatabaseView';
+import OfficerEditModal from './OfficerEditModal';
 import DateBackupModal from './DateBackupModal';
 import RegistrationReviewModal from './RegistrationReviewModal';
 import * as XLSX from 'xlsx';
 import { BeneficiaryInquiry } from '../types';
+
+// Helper to format officer roles in Arabic
+function getOfficerRoleTitle(role: string): string {
+  const map: Record<string, string> = {
+    admin: 'مدير النظام (أدمن)',
+    director: 'مدير الإدارة',
+    manager_admission_unit: 'مدير وحدة القبول',
+    supervisor: 'مشرف وحدة القبول والتوجيه',
+    tech_support_supervisor: 'مشرف القبول دعم فني',
+    equivalency_supervisor: 'مشرف القبول معادلة الشهادات',
+    planning_vacancy_supervisor: 'مشرف التخطيط فتح الشواغر',
+    school_planning: 'مشرف التخطيط المدرسي',
+    school_leadership: 'مشرف القيادة المدرسية',
+    primary_school_supervisor: 'مشرف الإدارة المدرسية (ابتدائي)',
+    intermediate_school_supervisor: 'مشرف الإدارة المدرسية (متوسط)',
+    secondary_school_supervisor: 'مشرف الإدارة المدرسية (ثانوي)',
+    early_childhood_official: 'مسؤول الطفولة المبكرة',
+    kindergarten_official: 'مسؤول رياض الأطفال',
+  };
+  return map[role] || (role === 'admin' ? 'مدير النظام (أدمن)' : 'مشرف قبول وتوجيه');
+}
 
 export function normalizeArabicText(text: string): string {
   if (!text) return '';
@@ -222,6 +246,16 @@ export default function Dashboard({
     } catch {}
     return DEMO_OFFICERS[0];
   });
+  const [officers, setOfficers] = useState<OfficerUser[]>(() => {
+    try {
+      const cached = localStorage.getItem('officer_users_v4');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return DEMO_OFFICERS;
+  });
   const [activeFeature, setActiveFeature] = useState<
     'requests' | 'equivalency_requests' | 'inquiries' | 'principal_reports' | 'sync' | 'settings' | 'placements' | 'staff' | 'feedback' | 'analytics' | 'alerts' | 'schools' | 'satisfaction' | 'reports' | 'principal_data'
   >('requests');
@@ -294,6 +328,184 @@ export default function Dashboard({
   const [showMyRequestsOnly, setShowMyRequestsOnly] = useState(false);
   const [showDispatchTimeline, setShowDispatchTimeline] = useState<boolean>(true);
   const [inquiriesDefaultTab, setInquiriesDefaultTab] = useState<'general' | 'my_claimed' | 'all'>('general');
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [editingOfficer, setEditingOfficer] = useState<OfficerUser | null>(null);
+
+  const fileInputImportRef = useRef<HTMLInputElement>(null);
+  const fileInputUpdateRef = useRef<HTMLInputElement>(null);
+
+  // Advanced & Resilient Excel / CSV Users Import & Update Engine
+  const handleImportUsers = (file: File, updateOnly: boolean) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const buffer = e.target?.result as ArrayBuffer;
+        const wb = XLSX.read(buffer, { type: 'array', cellText: true, cellDates: true });
+        const sheetName = wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        
+        // 1. Get raw rows to handle any header location
+        const rawRows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        if (!rawRows || rawRows.length === 0) {
+          alert('الملف فارغ أو لا يحتوي على بيانات صالحة.');
+          return;
+        }
+
+        // Helper to normalize keys and text
+        const cleanStr = (v: any) => String(v || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+        // 2. Find header row
+        let headerRowIndex = 0;
+        let foundHeader = false;
+        for (let i = 0; i < Math.min(rawRows.length, 10); i++) {
+          const rowText = rawRows[i].map(c => cleanStr(c)).join(' ');
+          if (rowText.includes('اسم') || rowText.includes('name') || rowText.includes('سجل') || rowText.includes('هوية') || rowText.includes('جوال')) {
+            headerRowIndex = i;
+            foundHeader = true;
+            break;
+          }
+        }
+
+        const headers = (rawRows[headerRowIndex] || []).map(h => String(h || '').trim());
+        
+        // Column resolver helper
+        const getColIdx = (keywords: string[]) => {
+          return headers.findIndex(h => {
+            const norm = cleanStr(h);
+            return keywords.some(k => norm.includes(cleanStr(k)));
+          });
+        };
+
+        const nameIdx = getColIdx(['الاسم الرباعي', 'اسم الموظف', 'اسم المستخدم', 'اسم المشرف', 'الاسم الكامل', 'الاسم', 'name', 'employee']);
+        const idIdx = getColIdx(['السجل المدني', 'رقم الهوية', 'الهوية', 'السجل', 'national', 'civil', 'id']);
+        const mobileIdx = getColIdx(['الجوال', 'رقم الجوال', 'الهاتف', 'mobile', 'phone']);
+        const emailIdx = getColIdx(['البريد', 'البريد الوزاري', 'الايميل', 'email']);
+        const roleIdx = getColIdx(['المهمة', 'الدور', 'المسمى الوظيفي', 'الدور الوظيفي', 'الوظيفة', 'role']);
+        const descIdx = getColIdx(['الوصف الوظيفي', 'الوصف', 'مهام الوظيفة', 'description']);
+        const stageIdx = getColIdx(['المرحلة', 'المرحلة الدراسية', 'stage']);
+        const workFieldIdx = getColIdx(['مجال العمل', 'القسم', 'الإدارة', 'workfield']);
+
+        // Fallback: If no explicit name column was found, pick first column with non-empty strings
+        const effectiveNameIdx = nameIdx !== -1 ? nameIdx : 0;
+
+        const dataRows = rawRows.slice(headerRowIndex + 1);
+        const parsedUsers: OfficerUser[] = [];
+
+        dataRows.forEach((row, rowIdx) => {
+          if (!row || row.length === 0) return;
+          const rawName = String(row[effectiveNameIdx] || '').trim();
+          // Filter out header re-occurrences or empty rows
+          if (!rawName || rawName === 'الاسم' || rawName === 'اسم الموظف' || rawName.length < 2) return;
+
+          const nationalId = idIdx !== -1 ? String(row[idIdx] || '').trim() : '';
+          const mobile = mobileIdx !== -1 ? String(row[mobileIdx] || '').trim() : '';
+          const email = emailIdx !== -1 ? String(row[emailIdx] || '').trim() : '';
+          const roleRaw = roleIdx !== -1 ? String(row[roleIdx] || '').trim() : '';
+          const desc = descIdx !== -1 ? String(row[descIdx] || '').trim() : '';
+          const stage = stageIdx !== -1 ? String(row[stageIdx] || 'الكل').trim() : 'الكل';
+          const workField = workFieldIdx !== -1 ? String(row[workFieldIdx] || '').trim() : 'إدارة القبول والتوجيه';
+
+          parsedUsers.push({
+            id: 'emp_' + Date.now().toString(36) + '_' + rowIdx,
+            nameAr: rawName,
+            nameEn: '',
+            role: (roleRaw || 'supervisor') as any,
+            mobile: mobile,
+            isActive: true,
+            nationalId: nationalId,
+            personalEmail: email,
+            roleDescription: desc,
+            assignedStage: stage,
+            workField: workField,
+            tasks: desc,
+            permissions: {}
+          });
+        });
+
+        if (parsedUsers.length === 0) {
+          alert('تعذر استخراج أسماء الموظفين من الملف. يرجى التأكد من أن الملف يحتوي على عمود يحمل اسم (الاسم) أو (اسم الموظف).');
+          return;
+        }
+
+        if (updateOnly) {
+          // تحديث الأسماء السابقة دون حذف أي مستخدم قديم
+          setOfficers(prev => {
+            const updated = [...prev];
+            let updatedCount = 0;
+            let addedCount = 0;
+
+            parsedUsers.forEach(newUser => {
+              const cleanNewName = newUser.nameAr.trim().replace(/\s+/g, ' ');
+              const index = updated.findIndex(u => {
+                const sameId = newUser.nationalId && u.nationalId && String(u.nationalId).trim() === String(newUser.nationalId).trim();
+                const sameName = u.nameAr && cleanNewName && u.nameAr.trim().replace(/\s+/g, ' ') === cleanNewName;
+                return sameId || sameName;
+              });
+
+              if (index !== -1) {
+                // Update existing user preserving id and keeping existing fields if new is empty
+                updated[index] = {
+                  ...updated[index],
+                  nameAr: newUser.nameAr || updated[index].nameAr,
+                  mobile: newUser.mobile || updated[index].mobile,
+                  nationalId: newUser.nationalId || updated[index].nationalId,
+                  personalEmail: newUser.personalEmail || updated[index].personalEmail,
+                  role: newUser.role !== 'supervisor' ? newUser.role : (updated[index].role || newUser.role),
+                  roleDescription: newUser.roleDescription || updated[index].roleDescription,
+                  workField: newUser.workField || updated[index].workField,
+                  assignedStage: newUser.assignedStage || updated[index].assignedStage,
+                };
+                updatedCount++;
+              } else {
+                // Add new user without deleting existing ones
+                updated.push(newUser);
+                addedCount++;
+              }
+            });
+
+            try { localStorage.setItem('officer_users_v4', JSON.stringify(updated)); } catch {}
+            
+            const msg = `✅ تم تحديث بيانات ${updatedCount} موظف وإضافة ${addedCount} اسم جديد مع الحفاظ على جميع الأسماء السابقة.`;
+            setClaimToastMessage(msg);
+            setTimeout(() => setClaimToastMessage(null), 5000);
+            return updated;
+          });
+        } else {
+          // استيراد أسماء جديدة دون حذف الأسماء القديمة
+          setOfficers(prev => {
+            const updated = [...prev];
+            let addedCount = 0;
+
+            parsedUsers.forEach(newUser => {
+              const cleanNewName = newUser.nameAr.trim().replace(/\s+/g, ' ');
+              const exists = updated.some(u => {
+                const sameId = newUser.nationalId && u.nationalId && String(u.nationalId).trim() === String(newUser.nationalId).trim();
+                const sameName = u.nameAr && cleanNewName && u.nameAr.trim().replace(/\s+/g, ' ') === cleanNewName;
+                return sameId || sameName;
+              });
+
+              if (!exists) {
+                updated.push(newUser);
+                addedCount++;
+              }
+            });
+
+            try { localStorage.setItem('officer_users_v4', JSON.stringify(updated)); } catch {}
+            
+            const msg = `✅ تم استيراد ${addedCount} مستخدم جديد بنجاح وإضافتهم للقائمة دون حذف أي أسماء سابقة.`;
+            setClaimToastMessage(msg);
+            setTimeout(() => setClaimToastMessage(null), 5000);
+            return updated;
+          });
+        }
+      } catch (err) {
+        console.error('Error importing Excel:', err);
+        alert('حدث خطأ أثناء قراءة ملف الإكسل. تأكد من صحة الملف وصيغته (.xlsx أو .xls أو .csv).');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
 
   // Dedicated Filter States for Equivalency Requests (Screen 2)
   const [eqSearchQuery, setEqSearchQuery] = useState('');
@@ -779,6 +991,12 @@ export default function Dashboard({
     setAssignTargetSurvey(null);
     setAssignNote('');
   };
+
+  const handleAddUser = (newUser: OfficerUser) => {
+    setOfficers([...officers, newUser]);
+    setShowAddUserModal(false);
+  };
+
 
   // Helper for Inline Calendar Data
   const HIJRI_MONTHS = [
@@ -1411,140 +1629,8 @@ export default function Dashboard({
   return (
     <div className={`min-h-screen ${isDark ? 'bg-[#061b28] text-slate-100' : 'bg-[#f4f7f9] text-slate-800'} font-sans`} style={{ direction: 'rtl' }}>
       
-      {/* 1. TOP HEADER (Official Ministry of Education Header) */}
-      <header className="bg-white dark:bg-[#081e2b] border-b border-slate-200 dark:border-teal-900/30 px-6 py-3 sticky top-0 z-30 shadow-xs">
-        <div className="max-w-[1600px] mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-             <div className="w-14 h-14 bg-teal-50 dark:bg-teal-900/20 rounded-2xl flex items-center justify-center p-1">
-                <img 
-                  src={getMoeLogoDataUrl()} 
-                  alt="MOE Logo" 
-                  className="w-10 h-10 object-contain" 
-                />
-             </div>
-             <div className="text-right">
-                <div className="text-[10px] font-black text-teal-600 dark:text-teal-400 uppercase tracking-tight">المملكة العربية السعودية</div>
-                <div className="text-xs font-black text-slate-800 dark:text-white">الإدارة العامة للتعليم بمنطقة المدينة المنورة</div>
-                <div className="text-[10px] font-bold text-slate-500">الشؤون التعليمية - إدارة القبول والتوجيه</div>
-             </div>
-          </div>
-          
-          <div className="flex items-center gap-3 sm:gap-4">
-            <button 
-              onClick={onBackToPortal}
-              className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 px-4 py-2.5 rounded-xl text-xs font-black text-slate-700 dark:text-teal-300 transition-all cursor-pointer shadow-2xs"
-              title="العودة للشاشة الرئيسية"
-            >
-               <LayoutDashboard className="w-6 h-6 text-teal-600 dark:text-teal-400" />
-               <span>الشاشة الرئيسية</span>
-            </button>
-
-            <button 
-              onClick={() => setActiveFeature('requests')}
-              className="flex items-center gap-2 px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black cursor-pointer shadow-sm transition-all"
-            >
-               <Zap className="w-4 h-4" />
-               <span>وحدة القبول</span>
-            </button>
-
-            <button 
-              onClick={onBackToPortal}
-              className="flex items-center gap-2 px-3 py-2 border border-slate-200 dark:border-teal-800/40 rounded-xl text-xs font-black text-slate-600 dark:text-teal-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all"
-            >
-               <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-               <span>{currentLang === 'ar' ? 'English' : 'عربي'}</span>
-            </button>
-          </div>
-        </div>
-      </header>
-
       <main className="max-w-[1600px] mx-auto p-4 sm:p-6 space-y-6">
         
-        {/* 2. USER PROFILE & OFFICER ACTIONS */}
-        <div className={`p-6 rounded-[32px] border ${isDark ? 'bg-[#081e2b] border-teal-800/30' : 'bg-white border-slate-100'} shadow-sm flex flex-wrap items-center justify-between gap-6`}>
-           <div className="flex items-center gap-5">
-              <div className="relative">
-                 <div className="w-16 h-16 rounded-2xl bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center text-teal-600 shadow-inner">
-                    <User className="w-8 h-8" />
-                 </div>
-                 <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-white dark:bg-[#081e2b] rounded-lg border dark:border-teal-800/40 flex items-center justify-center shadow-xs">
-                    <Lock className="w-3.5 h-3.5 text-amber-500" />
-                 </div>
-              </div>
-              <div>
-                 <div className="flex items-center gap-3">
-                    <h2 className="text-xl font-black text-slate-900 dark:text-white">{activeOfficer.nameAr}</h2>
-                    {isSystemAdmin(activeOfficer) ? (
-                      <span className="px-3 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 text-[10px] font-black border border-rose-200">
-                        مدير النظام (أدمن) - كامل الصلاحيات
-                      </span>
-                    ) : (
-                      <span className="px-3 py-0.5 rounded-full bg-teal-100 text-teal-800 dark:bg-teal-950/40 dark:text-teal-300 text-[10px] font-black border border-teal-200">
-                        {activeOfficer.roleDescription || 'مشرف معتمد'}
-                      </span>
-                    )}
-                    {isSystemAdmin(activeOfficer) && (
-                      <button
-                        onClick={() => setShowClearAllModal(true)}
-                        className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[11px] font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
-                        title="مسح وإفراغ جميع الطلبات والمعاملات من قاعدة البيانات (صلاحية حصرية للأدمن أ. سالم محمد الترجمي)"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>مسح جميع الطلبات (الأدمن)</span>
-                      </button>
-                    )}
-                 </div>
-                 <div className="flex items-center gap-4 mt-2 text-xs font-bold text-slate-500 dark:text-teal-400/70">
-                    <div className="flex items-center gap-1.5">
-                       <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 p-0.5 px-1.5 rounded text-[9px] font-black uppercase">ID</span>
-                       <span>السجل المدني: {activeOfficer.nationalId}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                       <Mail className="w-3.5 h-3.5" />
-                       <span>{activeOfficer.personalEmail}</span>
-                    </div>
-                 </div>
-              </div>
-           </div>
-
-           <div className="flex items-center gap-4">
-              <div className="flex flex-col items-end gap-1">
-                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">تبديل الحساب للاختبار والتقييم:</span>
-                 <select 
-                   value={activeOfficer.id}
-                   onChange={(e) => {
-                     const selected = DEMO_OFFICERS.find(o => o.id === e.target.value);
-                     if (selected) {
-                       setActiveOfficer(selected);
-                       try {
-                         localStorage.setItem('active_officer_id_v1', selected.id);
-                       } catch {}
-                       if (selected.role === 'equivalency_supervisor') {
-                         setActiveFeature('equivalency_requests');
-                       } else if (selected.role === 'school_planning' || selected.role === 'school_leadership') {
-                         setActiveFeature('placements');
-                       } else {
-                         setActiveFeature('requests');
-                       }
-                     }
-                   }}
-                   className="px-4 py-2 bg-slate-50 dark:bg-[#061b28] border border-slate-200 dark:border-teal-800/40 rounded-xl text-xs font-bold outline-hidden focus:ring-2 focus:ring-teal-500 cursor-pointer"
-                 >
-                    {DEMO_OFFICERS.map(o => (
-                      <option key={o.id} value={o.id}>{o.nameAr} ({isSystemAdmin(o) ? 'مدير النظام (أدمن)' : 'مشرف'})</option>
-                    ))}
-                 </select>
-              </div>
-              <button 
-                onClick={onBackToPortal}
-                className="flex items-center gap-2 px-5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 rounded-2xl text-xs font-black transition-all cursor-pointer"
-              >
-                 <LogOut className="w-4 h-4" />
-                 تسجيل الخروج
-              </button>
-           </div>
-        </div>
-
         {/* 3. DASHBOARD TITLE & FAST EXPORT ACTIONS */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pt-2">
            <div>
@@ -1588,6 +1674,41 @@ export default function Dashboard({
                 </button>
               )}
            </div>
+
+         {/* ACCOUNT SWITCHER BAR (Admin Only) */}
+         {activeOfficer && (
+            <div className={`p-4 rounded-[28px] border shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 ${isDark ? 'bg-[#081e2b]/90 border-teal-800/40' : 'bg-white border-slate-200'}`}>
+               <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center font-black">
+                     <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                     <div className="text-xs font-black text-slate-900 dark:text-white">شريط التنقل بين حسابات المسؤولين</div>
+                     <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">الحساب الحالي: <span className="text-teal-600 dark:text-teal-400 font-black">{activeOfficer.nameAr}</span> ({isSystemAdmin(activeOfficer) ? 'مدير النظام' : activeOfficer.role})</div>
+                  </div>
+               </div>
+               <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-black text-slate-400">تبديل إلى:</span>
+                  {DEMO_OFFICERS.map(officer => (
+                     <button
+                       key={officer.id}
+                       onClick={() => {
+                          setEditingOfficer(officer);
+                          localStorage.setItem('active_officer_id_v1', officer.id);
+                       }}
+                       className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                          activeOfficer.id === officer.id 
+                            ? 'bg-teal-600 text-white shadow-md' 
+                            : isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-teal-900/30' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                       }`}
+                     >
+                        <span>{officer.nameAr.split(' ')[0]}</span>
+                        {isSystemAdmin(officer) && <span className="w-2 h-2 rounded-full bg-emerald-400" />}
+                     </button>
+                  ))}
+               </div>
+            </div>
+         )}
         </div>
 
         {/* Urgent 2-Business-Days Delayed Requests Alert Banner on Main Screen */}
@@ -2446,6 +2567,13 @@ export default function Dashboard({
                          <span className="font-bold">«استقبال طلبات معادلة الشهادات ومراجعة الأوراق، التنسيق مع المدارس، وتوجيه التسكين»</span>
                       </div>
                    </div>
+                   <button
+                      onClick={() => setShowAddUserModal(true)}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-black transition-all flex items-center gap-2"
+                   >
+                      <Plus className="w-4 h-4" />
+                      إضافة مستخدم
+                   </button>
                 </div>
              </div>
 
@@ -3662,57 +3790,200 @@ export default function Dashboard({
         {activeFeature === 'staff' && (
           <div className="space-y-6">
             <div className={`p-6 rounded-[32px] border border-slate-100 dark:border-teal-800/20 shadow-xs ${isDark ? 'bg-[#081e2b]' : 'bg-white'}`}>
-               <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+               <div className="flex flex-wrap items-center justify-between gap-4 mb-6 pb-5 border-b border-slate-100 dark:border-teal-800/20">
                   <div className="flex items-center gap-3">
-                     <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 flex items-center justify-center text-indigo-600">
+                     <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 flex items-center justify-center text-indigo-600 shadow-inner">
                         <Users className="w-6 h-6" />
                      </div>
                      <div>
-                        <h2 className="text-lg font-black text-slate-900 dark:text-white">منسوبي الإدارة والكوادر والصلاحيات</h2>
-                        <p className="text-xs font-bold text-slate-400">سجل المشرفين والموظفين المختصين وصلاحيات المعالجة والتوزيع.</p>
+                        <div className="flex items-center gap-2.5">
+                          <h2 className="text-lg font-black text-slate-900 dark:text-white">منسوبي الإدارة والكوادر والصلاحيات</h2>
+                          <span className="px-2.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-black">
+                            {officers.length} كادر مسجل
+                          </span>
+                        </div>
+                        <p className="text-xs font-bold text-slate-400 mt-0.5">سجل المشرفين والموظفين، استيراد وتحديث الأسماء إكسل، وإدارة الصلاحيات والوصف الوظيفي.</p>
                      </div>
+                  </div>
+
+                  {/* Excel Import & Update & Add User Buttons */}
+                  <div className="flex flex-wrap items-center gap-2.5">
+                     {/* Hidden File Inputs */}
+                     <input 
+                        ref={fileInputImportRef}
+                        type="file" 
+                        className="hidden" 
+                        accept=".xlsx, .xls, .csv" 
+                        onChange={(e) => {
+                           if (e.target.files && e.target.files[0]) {
+                              handleImportUsers(e.target.files[0], false);
+                              e.target.value = '';
+                           }
+                        }} 
+                     />
+                     <input 
+                        ref={fileInputUpdateRef}
+                        type="file" 
+                        className="hidden" 
+                        accept=".xlsx, .xls, .csv" 
+                        onChange={(e) => {
+                           if (e.target.files && e.target.files[0]) {
+                              handleImportUsers(e.target.files[0], true);
+                              e.target.value = '';
+                           }
+                        }} 
+                     />
+
+                     {/* استيراد إكسل (إضافة دون حذف القديم) */}
+                     <button
+                        type="button"
+                        onClick={() => fileInputImportRef.current?.click()}
+                        className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer shadow-sm active:scale-95" 
+                        title="إضافة أسماء جديدة من ملف إكسل دون حذف الأسماء القديمة"
+                     >
+                        <FileText className="w-4 h-4" />
+                        <span>استيراد إكسل</span>
+                     </button>
+
+                     {/* تحديث إكسل (تحديث الأسماء دون حذف القديم) */}
+                     <button
+                        type="button"
+                        onClick={() => fileInputUpdateRef.current?.click()}
+                        className="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer shadow-sm active:scale-95" 
+                        title="تحديث بيانات الموظفين المسجلين دون حذف أي اسم سابق"
+                     >
+                        <RefreshCw className="w-4 h-4" />
+                        <span>تحديث إكسل</span>
+                     </button>
+
+                     {/* إضافة مستخدم يدوي */}
+                     <button
+                        type="button"
+                        onClick={() => setShowAddUserModal(true)}
+                        className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all flex items-center gap-2 shadow-sm cursor-pointer active:scale-95"
+                     >
+                        <Plus className="w-4 h-4" />
+                        <span>إضافة مستخدم</span>
+                     </button>
                   </div>
                </div>
 
+               {/* Quick Info Bar
+               
+               <div className="p-3.5 mb-6 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/30 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 text-indigo-900 dark:text-indigo-200 font-bold">
+                     <Shield className="w-4 h-4 text-indigo-600 shrink-0" />
+                     <span>اضغط على اسم أي موظف للدخول إلى صفحته وتعديل صلاحياته، مهمته، ووصفه الوظيفي أو حذفه (للأدمن).</span>
+                  </div>
+                  <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                     🛡️ عمليات الاستيراد والتحديث تحافظ تماماً على السجلات السابقة دون حذف
+                  </div>
+               </div>
+
+               {/* Users Grid */}
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {DEMO_OFFICERS.map(officer => {
-                    const officerSurveysCount = surveys.filter(s => s.serviceEmployee === officer.nameAr || s.assignedOfficerId === officer.id).length;
-                    const officerResolvedCount = surveys.filter(s => (s.serviceEmployee === officer.nameAr || s.assignedOfficerId === officer.id) && s.isResolved).length;
+                  {officers.map(officer => {
+                     const isCurrUserAdmin = officer.role === 'admin' || isSystemAdmin(officer);
+                     return (
+                        <div 
+                           key={officer.id} 
+                           className="p-5 rounded-2xl border border-slate-200 dark:border-teal-800/40 bg-slate-50 dark:bg-slate-900/50 space-y-4 transition-all hover:border-indigo-500 hover:shadow-md"
+                        >
+                           {/* User Top Row: Avatar + Name (Clickable) + Role Badge */}
+                           <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                 <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-black text-sm shrink-0 shadow-xs ${
+                                    isCurrUserAdmin 
+                                       ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300' 
+                                       : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300'
+                                 }`}>
+                                    {officer.nameAr ? officer.nameAr.charAt(0) : 'م'}
+                                 </div>
+                                 <div className="min-w-0">
+                                    <button
+                                       type="button"
+                                       onClick={() => setEditingOfficer(officer)}
+                                       className="font-black text-sm text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors text-right cursor-pointer truncate block w-full"
+                                       title="اضغط للدخول على صفحة الموظف وتعديلها"
+                                    >
+                                       {officer.nameAr}
+                                    </button>
+                                    <div className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5 mt-0.5">
+                                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                       <span>نشط بالنظام</span>
+                                    </div>
+                                 </div>
+                              </div>
 
-                    return (
-                      <div key={officer.id} className="p-5 rounded-2xl border border-slate-200 dark:border-teal-800/40 bg-slate-50 dark:bg-slate-900/50 space-y-4">
-                         <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-xl bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300 flex items-center justify-center font-black">
-                               {officer.nameAr.charAt(0)}
-                            </div>
-                            <div>
-                               <div className="font-black text-sm text-slate-900 dark:text-white">{officer.nameAr}</div>
-                               <div className="text-[10px] font-bold text-slate-400">{isSystemAdmin(officer) ? 'مدير النظام (أدمن)' : 'مشرف قبول وتوجيه'}</div>
-                            </div>
-                         </div>
+                              <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black shrink-0 ${
+                                 isCurrUserAdmin
+                                    ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200/60'
+                                    : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/60'
+                              }`}>
+                                 {getOfficerRoleTitle(officer.role)}
+                              </span>
+                           </div>
 
-                         <div className="text-xs space-y-1 text-slate-600 dark:text-slate-300 pt-2 border-t border-slate-200 dark:border-teal-800/20">
-                            <div>السجل المدني: <strong className="font-mono">{officer.nationalId}</strong></div>
-                            <div>البريد: <strong className="font-mono">{officer.personalEmail}</strong></div>
-                         </div>
+                           {/* Civil ID & Contact Info */}
+                           <div className="text-xs space-y-1.5 text-slate-600 dark:text-slate-300 pt-3 border-t border-slate-200/60 dark:border-teal-800/20">
+                              <div className="flex items-center justify-between">
+                                 <span className="text-slate-400 text-[11px]">السجل المدني:</span>
+                                 <strong className="font-mono font-bold">{officer.nationalId || '---'}</strong>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                 <span className="text-slate-400 text-[11px]">الجوال:</span>
+                                 <strong className="font-mono font-bold">{officer.mobile || '---'}</strong>
+                              </div>
+                              {officer.personalEmail && (
+                                 <div className="flex items-center justify-between truncate">
+                                    <span className="text-slate-400 text-[11px]">البريد:</span>
+                                    <span className="font-mono text-[11px] text-slate-500 truncate max-w-[180px]">{officer.personalEmail}</span>
+                                 </div>
+                              )}
+                           </div>
 
-                         <div className="flex items-center justify-between text-xs bg-white dark:bg-[#081e2b] p-3 rounded-xl border border-slate-100 dark:border-teal-900/30">
-                            <div>الطلبات المسندة: <strong>{officerSurveysCount}</strong></div>
-                            <div>المنجزة: <strong className="text-emerald-600">{officerResolvedCount}</strong></div>
-                         </div>
+                           {/* Approved Job Description if present */}
+                           {officer.roleDescription && (
+                              <div className="p-2.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40 text-[11px] text-amber-900 dark:text-amber-300 font-bold leading-relaxed">
+                                 <span className="font-black text-amber-700 dark:text-amber-400">الوصف الوظيفي المعتمد:</span> {officer.roleDescription}
+                              </div>
+                           )}
 
-                         <button 
-                           onClick={() => {
-                             setActiveOfficer(officer);
-                             setActiveFeature('requests');
-                             setShowMyRequestsOnly(true);
-                           }}
-                           className="w-full py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black cursor-pointer transition-all"
-                         >
-                            عرض طلبات الموظف ({officer.nameAr})
-                         </button>
-                      </div>
-                    );
+                           {/* Card Footer Actions */}
+                           <div className="flex items-center gap-2 pt-2 border-t border-slate-200/60 dark:border-teal-800/20">
+                              <button
+                                 type="button"
+                                 onClick={() => setEditingOfficer(officer)}
+                                 className="flex-1 py-2 px-3 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                              >
+                                 <User className="w-3.5 h-3.5" />
+                                 <span>تعديل الصلاحيات</span>
+                              </button>
+
+                              {(activeOfficer.role === 'admin' || isSystemAdmin(activeOfficer)) && (
+                                 <button
+                                    type="button"
+                                    onClick={(e) => {
+                                       e.stopPropagation();
+                                       if (confirm(`هل أنت متأكد من حذف الموظف (${officer.nameAr}) نهائياً؟`)) {
+                                          setOfficers(prev => {
+                                             const updated = prev.filter(o => o.id !== officer.id);
+                                             try { localStorage.setItem('officer_users_v4', JSON.stringify(updated)); } catch {}
+                                             return updated;
+                                          });
+                                          setClaimToastMessage(`تم حذف المستخدم (${officer.nameAr}) بنجاح`);
+                                          setTimeout(() => setClaimToastMessage(null), 3000);
+                                       }
+                                    }}
+                                    className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl transition-all cursor-pointer"
+                                    title="حذف المستخدم (صلاحية الأدمن)"
+                                 >
+                                    <Trash2 className="w-4 h-4" />
+                                 </button>
+                              )}
+                           </div>
+                        </div>
+                     );
                   })}
                </div>
             </div>
@@ -4215,7 +4486,6 @@ export default function Dashboard({
             isRtl={isRtl}
           />
         )}
-
       </main>
 
       
@@ -4689,6 +4959,45 @@ export default function Dashboard({
           onSendToPrincipal={handleSendToPrincipalForStudentFile}
           onSendToPlanning={handleSendToPlanning}
           onSendToLeadership={handleSendToLeadership}
+          isDark={isDark}
+        />
+      )}
+
+
+      {showAddUserModal && (
+        <AddUserModal
+          onClose={() => setShowAddUserModal(false)}
+          onAdd={handleAddUser}
+          isDark={isDark}
+        />
+      )}
+
+      {editingOfficer && (
+        <UserDetailModal
+          officer={editingOfficer}
+          onClose={() => setEditingOfficer(null)}
+          onSave={(updated) => {
+            setOfficers(prev => {
+              const updatedList = prev.map(o => o.id === updated.id ? updated : o);
+              try { localStorage.setItem('officer_users_v4', JSON.stringify(updatedList)); } catch {}
+              return updatedList;
+            });
+            setEditingOfficer(null);
+            setClaimToastMessage(`تم حفظ وتحديث بيانات الموظف (${updated.nameAr}) والصلاحيات بنجاح ✅`);
+            setTimeout(() => setClaimToastMessage(null), 3000);
+          }}
+          onDelete={(id) => {
+            const officerToRemove = officers.find(o => o.id === id);
+            setOfficers(prev => {
+              const updatedList = prev.filter(o => o.id !== id);
+              try { localStorage.setItem('officer_users_v4', JSON.stringify(updatedList)); } catch {}
+              return updatedList;
+            });
+            setEditingOfficer(null);
+            setClaimToastMessage(`تم حذف المستخدم (${officerToRemove?.nameAr || ''}) بنجاح`);
+            setTimeout(() => setClaimToastMessage(null), 3000);
+          }}
+          isAdmin={activeOfficer.role === 'admin' || isSystemAdmin(activeOfficer)}
           isDark={isDark}
         />
       )}

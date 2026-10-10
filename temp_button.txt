@@ -1,0 +1,10 @@
+                         <button 
+                           onClick={() => {
+                             setActiveOfficer(officer);
+                             setActiveFeature('requests');
+                             setShowMyRequestsOnly(true);
+                           }}
+                           className="w-full py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black cursor-pointer transition-all"
+                         >
+                            عرض طلبات الموظف ({officer.nameAr})
+                         </button>
