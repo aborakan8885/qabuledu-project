@@ -1208,55 +1208,6 @@ export default function Portal({
 
               {adminAuthMode === 'login' ? (
                 <div className="space-y-6">
-                  {/* Quick Demo Login Selection as requested */}
-                  <div className={`p-4 rounded-2xl border-2 border-dashed ${
-                    isDark ? 'border-amber-500/30 bg-amber-950/10' : 'border-amber-200 bg-amber-50/50'
-                  }`}>
-                    <div className="flex items-center gap-2 mb-3">
-                      <Sparkles className="w-4 h-4 text-amber-500" />
-                      <span className={`text-xs font-black ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
-                        {isRtl ? 'تجربة سريعة (يوزرات تجريبية للاختبار):' : 'Quick Demo Access (Test Users):'}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {DEMO_OFFICERS.map((demo) => (
-                        <button
-                          key={demo.id}
-                          type="button"
-                          onClick={() => {
-                            setLoginError('');
-                            localStorage.setItem('officer_authenticated_v1', 'true');
-                            localStorage.setItem('active_officer_id_v1', demo.id);
-                            if (demo.role === 'admin' && (demo.nationalId === '1068575628' || demo.id === 'emp_1')) {
-                               localStorage.setItem('admin_api_key', 'salim_admin_key_2026');
-                            } else {
-                               localStorage.removeItem('admin_api_key');
-                            }
-                            onSelectRole('admin');
-                          }}
-                          className={`px-3 py-2 rounded-xl text-[10px] font-bold transition-all border shadow-sm flex items-center gap-1.5 active:scale-95 cursor-pointer ${
-                            isDark 
-                              ? 'bg-[#0b2336] border-teal-800/40 text-teal-200 hover:border-amber-400 hover:text-amber-300' 
-                              : 'bg-white border-slate-200 text-slate-700 hover:border-amber-500 hover:text-amber-700'
-                          }`}
-                          title={demo.roleDescription}
-                        >
-                          <div className={`w-2 h-2 rounded-full ${
-                            demo.role === 'admin' ? 'bg-red-500' : 
-                            demo.role === 'supervisor' ? 'bg-blue-500' : 
-                            demo.role === 'school_planning' ? 'bg-amber-500' : 
-                            'bg-emerald-500'
-                          }`} />
-                          {demo.nameAr.split('(')[0].trim()}
-                        </button>
-                      ))}
-                    </div>
-                    <p className={`text-[10px] mt-3 font-medium ${isDark ? 'text-teal-400/60' : 'text-slate-400'}`}>
-                      {isRtl 
-                        ? '• اضغط على أي مسمى وظيفي أعلاه للدخول المباشر بالصلاحيات المخصصة دون كلمة مرور (لغرض التجربة).' 
-                        : '• Click any job title above for instant login with assigned permissions (for testing).'}
-                    </p>
-                  </div>
 
                   <form
                     className="space-y-5"
