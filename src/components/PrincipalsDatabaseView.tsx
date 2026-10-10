@@ -41,7 +41,7 @@ import {
 
 interface PrincipalsDatabaseViewProps {
   schools: SchoolItem[];
-  onUpdateSchools: (schools: SchoolItem[]) => void;
+  onUpdateSchools: (schools: SchoolItem[], isExplicitAdminClear?: boolean) => void;
   onDeleteSchool?: (id: string) => void;
   activeOfficer?: OfficerUser;
   isDark?: boolean;
@@ -69,6 +69,7 @@ export const PrincipalsDatabaseView: React.FC<PrincipalsDatabaseViewProps> = ({
 
   // Modals States
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingSchool, setEditingSchool] = useState<SchoolItem | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -783,6 +784,17 @@ export const PrincipalsDatabaseView: React.FC<PrincipalsDatabaseViewProps> = ({
             </button>
             )}
 
+            {/* Upload Excel Button */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              title="رفع واستيراد ملف إكسل لبيانات مديري المدارس والربط بالسجل المدني"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>رفع ملف الإكسل</span>
+            </button>
+
             {/* Add School Manually */}
             <button
               onClick={() => {
@@ -803,6 +815,17 @@ export const PrincipalsDatabaseView: React.FC<PrincipalsDatabaseViewProps> = ({
             >
               <Plus className="w-3.5 h-3.5" />
               <span>إضافة مدرسة ومدير</span>
+            </button>
+
+            {/* Delete Current Data Button */}
+            <button
+              type="button"
+              onClick={() => setShowClearConfirmModal(true)}
+              className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800/40 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer"
+              title="حذف جميع بيانات مديري المدارس والسجلات الحالية"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+              <span>حذف البيانات الحالية</span>
             </button>
           </div>
         </div>
@@ -1148,6 +1171,60 @@ export const PrincipalsDatabaseView: React.FC<PrincipalsDatabaseViewProps> = ({
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>اعتماد وحفظ البيانات في النظام ({parsedData.totalRows} مدرسة)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM CLEAR ALL PRINCIPALS DATA MODAL */}
+      {showClearConfirmModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className={`rounded-3xl max-w-md w-full p-6 space-y-5 border shadow-2xl ${
+            isDark ? 'bg-[#081e2b] border-teal-800/40 text-white' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            <div className="flex items-center gap-3 border-b pb-4 border-rose-100 dark:border-rose-900/30">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-black text-base text-slate-900 dark:text-white">
+                  تأكيد حذف بيانات مديري المدارس الحالية
+                </h3>
+                <p className="text-xs font-bold text-rose-600 dark:text-rose-400 mt-0.5">
+                  تفريغ كافة سجلات مديري المدارس والربط بالسجل المدني
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-bold">
+              هل أنت متأكد من رغبتك في حذف وتفريغ جميع بيانات مديري المدارس والربط بالسجل المدني الحالية؟ سيتم مسح كافة السجلات المتاحة حالياً ({schools.length} سجل).
+            </p>
+
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/30 rounded-xl flex items-start gap-2 text-[11px] text-amber-800 dark:text-amber-300 font-bold">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>ملاحظة: يمكنك إعادة رفع البيانات في أي وقت بملف جديد عبر خيار "رفع ملف الإكسل".</span>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowClearConfirmModal(false)}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+              >
+                إلغاء التراجع
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  (onUpdateSchools as any)([], true);
+                  setShowClearConfirmModal(false);
+                  showToast('🗑️ تم حذف جميع بيانات مديري المدارس الحالية بنجاح', 'success');
+                }}
+                className="px-4 py-2.5 rounded-xl text-xs font-black bg-rose-600 hover:bg-rose-700 text-white shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>نعم، حذف البيانات الحالية</span>
               </button>
             </div>
           </div>

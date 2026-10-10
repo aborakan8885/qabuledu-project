@@ -938,3 +938,44 @@ export async function createFullSystemBackupSnapshot(): Promise<string> {
 
   return `تم أخذ نسخة شاملة بنجاح.`;
 }
+
+// =========================================================================
+// SERVER PERSISTENCE & AUTO-SYNC ENGINE
+// =========================================================================
+export async function syncDataWithServer(data: {
+  surveys?: SurveyResponse[];
+  schools?: SchoolItem[];
+  principalReports?: PrincipalReport[];
+  inquiries?: BeneficiaryInquiry[];
+  feedbacks?: BeneficiaryFeedback[];
+  officers?: OfficerUser[];
+  config?: any;
+  isExplicitAdminClear?: boolean;
+}): Promise<boolean> {
+  try {
+    const res = await fetch('/api/sync/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('Server sync error (will continue using resilient local store):', err);
+    return false;
+  }
+}
+
+export async function fetchServerSyncedData(): Promise<any | null> {
+  try {
+    const res = await fetch('/api/sync/data');
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (json.success && json.exists && json.data) {
+      return json.data;
+    }
+    return null;
+  } catch (err) {
+    console.warn('Server sync fetch error (using resilient local storage):', err);
+    return null;
+  }
+}

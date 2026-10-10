@@ -91,14 +91,9 @@ export default function InquiriesModal({
     });
 
     setSubmitSuccess(true);
-    setTimeout(() => {
-      setSubmitSuccess(false);
-      setInquiryText('');
-      // Switch automatically to tracking tab with the name filled
-      setTrackName(senderName.trim());
-      setHasSearched(true);
-      setActiveTab('track');
-    }, 2000);
+    setInquiryText('');
+    setTrackName(senderName.trim());
+    setHasSearched(true);
   };
 
   // Matched Inquiries by Beneficiary Name only

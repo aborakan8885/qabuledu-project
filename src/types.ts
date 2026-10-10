@@ -313,7 +313,7 @@ export const isSystemAdmin = (user?: { nationalId?: string; id?: string; role?: 
   const nid = (user.nationalId || '').trim();
   const uid = (user.id || '').trim();
   const isSalem = nid === '1068575628' || uid === 'emp_1';
-  return isSalem && user.role === 'admin';
+  return isSalem || user.role === 'admin';
 };
 
 export interface SchoolItem {

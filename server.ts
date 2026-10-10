@@ -1,3 +1,4 @@
+import fs from "fs";
 import express from "express";
 import compression from "compression";
 import helmet from "helmet";
@@ -86,8 +87,8 @@ async function startServer() {
   // Enable response compression (Gzip / Brotli) for maximum throughput
   app.use(compression({ level: 6, threshold: 1024 }));
 
-  app.use(express.json({ limit: "5mb" })); 
-  app.use(express.urlencoded({ extended: true, limit: "5mb" }));
+  app.use(express.json({ limit: "50mb" })); 
+  app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
   // Custom high concurrency headers
   app.use((_req, res, next) => {
@@ -113,6 +114,140 @@ async function startServer() {
     }
     next();
   };
+
+  // =========================================================================
+  // PERSISTENCE ENGINE: Guaranteed Data Preservation & Auto-Sync
+  // =========================================================================
+  const DATA_DIR = path.join(process.cwd(), "data");
+  const STORAGE_FILE = path.join(DATA_DIR, "app_storage.json");
+  const BACKUPS_DIR = path.join(DATA_DIR, "backups");
+
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (!fs.existsSync(BACKUPS_DIR)) fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+
+  // Endpoint: Retrieve latest synced data from server
+  app.get("/api/sync/data", (_req, res): any => {
+    try {
+      if (!fs.existsSync(STORAGE_FILE)) {
+        return res.json({ success: true, exists: false, data: null });
+      }
+      const raw = fs.readFileSync(STORAGE_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      return res.json({ success: true, exists: true, data: parsed });
+    } catch (err: any) {
+      console.error("Error reading persistence store:", err);
+      return res.status(500).json({ success: false, error: err?.message || "Sync read failed" });
+    }
+  });
+
+  // Endpoint: Save and merge data to server with strict anti-loss protection
+  app.post("/api/sync/data", (req, res): any => {
+    try {
+      const payload = req.body;
+      if (!payload || typeof payload !== "object") {
+        return res.status(400).json({ success: false, error: "Invalid sync payload" });
+      }
+
+      let existingData: any = {};
+      if (fs.existsSync(STORAGE_FILE)) {
+        try {
+          existingData = JSON.parse(fs.readFileSync(STORAGE_FILE, "utf-8"));
+        } catch {
+          existingData = {};
+        }
+      }
+
+      const mergedData: any = {
+        ...existingData,
+        ...payload,
+        lastSyncedAt: new Date().toISOString()
+      };
+
+      // 1. Surveys: Merge by ID to protect every transaction
+      if (Array.isArray(payload.surveys)) {
+        const surveyMap = new Map();
+        (existingData.surveys || []).forEach((s: any) => { if (s && s.id) surveyMap.set(s.id, s); });
+        payload.surveys.forEach((s: any) => { if (s && s.id) surveyMap.set(s.id, s); });
+        mergedData.surveys = Array.from(surveyMap.values());
+      }
+
+      // 2. Inquiries: Merge by ID
+      if (Array.isArray(payload.inquiries)) {
+        const inqMap = new Map();
+        (existingData.inquiries || []).forEach((i: any) => { if (i && i.id) inqMap.set(i.id, i); });
+        payload.inquiries.forEach((i: any) => { if (i && i.id) inqMap.set(i.id, i); });
+        mergedData.inquiries = Array.from(inqMap.values());
+      }
+
+      // 3. Schools: Merge by code/id, allow explicit admin clear only
+      if (Array.isArray(payload.schools)) {
+        if (payload.isExplicitAdminClear && payload.schools.length === 0) {
+          mergedData.schools = [];
+          mergedData.schoolsCleared = true;
+        } else if (payload.isExplicitAdminClear) {
+          mergedData.schools = payload.schools;
+          mergedData.schoolsCleared = false;
+        } else {
+          const schMap = new Map();
+          (existingData.schools || []).forEach((s: any) => {
+            const k = s.ministryCode || s.code || s.id;
+            if (k) schMap.set(k, s);
+          });
+          payload.schools.forEach((s: any) => {
+            const k = s.ministryCode || s.code || s.id;
+            if (k) {
+              const ex = schMap.get(k);
+              schMap.set(k, ex ? { ...ex, ...s } : s);
+            }
+          });
+          mergedData.schools = Array.from(schMap.values());
+          mergedData.schoolsCleared = false;
+        }
+      }
+
+      // 4. Officers: Merge by ID and preserve admin Salem
+      if (Array.isArray(payload.officers)) {
+        const offMap = new Map();
+        (existingData.officers || []).forEach((o: any) => { if (o && o.id) offMap.set(o.id, o); });
+        payload.officers.forEach((o: any) => { if (o && o.id) offMap.set(o.id, o); });
+        mergedData.officers = Array.from(offMap.values());
+      }
+
+      // 5. Principal Reports: Merge
+      if (Array.isArray(payload.principalReports)) {
+        const repMap = new Map();
+        (existingData.principalReports || []).forEach((r: any) => { if (r && r.id) repMap.set(r.id, r); });
+        payload.principalReports.forEach((r: any) => { if (r && r.id) repMap.set(r.id, r); });
+        mergedData.principalReports = Array.from(repMap.values());
+      }
+
+      // 6. Config: Merge
+      if (payload.config && typeof payload.config === 'object') {
+        mergedData.config = { ...(existingData.config || {}), ...payload.config };
+      }
+
+      // Atomic write to avoid file corruption
+      const tempFile = `${STORAGE_FILE}.tmp.${Date.now()}`;
+      fs.writeFileSync(tempFile, JSON.stringify(mergedData, null, 2), "utf-8");
+      fs.renameSync(tempFile, STORAGE_FILE);
+
+      // Hourly snapshot for disaster recovery
+      const snapshotName = `snapshot_${new Date().toISOString().slice(0, 13)}.json`;
+      const snapshotPath = path.join(BACKUPS_DIR, snapshotName);
+      if (!fs.existsSync(snapshotPath)) {
+        fs.copyFileSync(STORAGE_FILE, snapshotPath);
+      }
+
+      return res.json({
+        success: true,
+        message: "تم حفظ ومزامنة البيانات في خادم المنصة وحمايتها من أي فقدان بنجاح",
+        lastSyncedAt: mergedData.lastSyncedAt
+      });
+    } catch (err: any) {
+      console.error("Error saving sync data:", err);
+      return res.status(500).json({ success: false, error: err?.message || "Sync save failed" });
+    }
+  });
 
   // API Endpoint: Health & System Status check
   app.get("/api/health", (_req, res) => {

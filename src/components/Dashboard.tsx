@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import AddUserModal from './AddUserModal';
 import UserDetailModal from './UserDetailModal';
 import { RequestDispatchTimeline } from './RequestDispatchTimeline';
@@ -58,6 +58,7 @@ import {
   FileSignature,
   FileBarChart,
   School,
+  FileSpreadsheet,
   Inbox,
   ArrowRightLeft,
   Check,
@@ -97,7 +98,10 @@ import {
   canOfficerHandleAdmissionRequests,
   canOfficerHandleEquivalencyRequests,
   DEMO_OFFICERS, 
-  getProblemTypeArabicLabel 
+  getProblemTypeArabicLabel,
+  saveOfficersToStorage,
+  loadOfficersFromStorage,
+  syncDataWithServer
 } from '../utils/storageEngine';
 import { ReportExportData } from '../utils/reportExporter';
 import { OfficialReportModal } from './OfficialReportModal';
@@ -174,7 +178,7 @@ interface DashboardProps {
   onImportSurveys: (surveys: SurveyResponse[]) => void;
   onAddSurvey: (survey: SurveyResponse) => void;
   onUpdateSurvey: (survey: SurveyResponse) => void;
-  onImportSchools: (schools: SchoolItem[]) => void;
+  onImportSchools: (schools: SchoolItem[], isExplicitAdminClear?: boolean) => void;
   onDeleteSchool: (id: string) => void;
   config: AppConfig;
   onUpdateConfig: (config: AppConfig) => void;
@@ -256,6 +260,12 @@ export default function Dashboard({
     } catch {}
     return DEMO_OFFICERS;
   });
+
+  // Strict persistence & auto-sync of officer users (protect Salem Al-Tarjami & custom staff)
+  useEffect(() => {
+    saveOfficersToStorage(officers);
+    syncDataWithServer({ officers });
+  }, [officers]);
   const [activeFeature, setActiveFeature] = useState<
     'requests' | 'equivalency_requests' | 'inquiries' | 'principal_reports' | 'sync' | 'settings' | 'placements' | 'staff' | 'feedback' | 'analytics' | 'alerts' | 'schools' | 'satisfaction' | 'reports' | 'principal_data'
   >('requests');
@@ -655,6 +665,18 @@ export default function Dashboard({
   const [showClearAllModal, setShowClearAllModal] = useState(false);
   const [clearSuccessToast, setClearSuccessToast] = useState(false);
   const [newSchool, setNewSchool] = useState({ name: '', code: '', stage: 'Primary', sector: 'North', gender: 'boys', capacity: 30 });
+  
+  // Schools Directory Excel Import & Clear Data States
+  const schoolFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [showClearSchoolsConfirmModal, setShowClearSchoolsConfirmModal] = useState(false);
+  const [showSchoolImportModal, setShowSchoolImportModal] = useState(false);
+  const [schoolImportMode, setSchoolImportMode] = useState<'merge' | 'replace'>('merge');
+  const [schoolParsedData, setSchoolParsedData] = useState<{
+    fileName: string;
+    totalRows: number;
+    rows: SchoolItem[];
+    rawHeaders: string[];
+  } | null>(null);
   const [schoolSearchQuery, setSchoolSearchQuery] = useState('');
   const [dangerConfirmText, setDangerConfirmText] = useState('');
 
@@ -1729,6 +1751,168 @@ export default function Dashboard({
   };
 
   // Add School to directory
+  // Handler for Uploading Schools Excel (.xlsx, .xls, .csv)
+  const handleSchoolExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const buffer = evt.target?.result as ArrayBuffer;
+        if (!buffer) {
+          setClaimToastMessage('تعذر قراءة محتوى ملف المدارس');
+          return;
+        }
+        const wb = XLSX.read(buffer, { type: 'array', cellText: true, cellDates: true });
+        const firstSheet = wb.SheetNames[0];
+        const ws = wb.Sheets[firstSheet];
+        const rawJson: any[] = XLSX.utils.sheet_to_json(ws, { raw: false, defval: '' });
+        if (!rawJson || rawJson.length === 0) {
+          setClaimToastMessage('الملف فارغ أو لا يحتوي على صفوف بيانات مقروءة');
+          return;
+        }
+        const rawHeaders = Object.keys(rawJson[0] || {});
+
+        const findCol = (candidates: string[]) => {
+          for (const cand of candidates) {
+            const normCand = cand.trim().toLowerCase().replace(/[\s_\-]/g, '');
+            const found = rawHeaders.find(h => {
+              const normH = h.trim().toLowerCase().replace(/[\s_\-]/g, '');
+              return normH === normCand || normH.includes(normCand) || normCand.includes(normH);
+            });
+            if (found) return found;
+          }
+          return '';
+        };
+
+        const schoolNameCol = findCol(['اسم المدرسة', 'اسم المدرسه', 'المدرسة', 'المدرسه', 'اسم المنشأة', 'الاسم', 'مدرسة']);
+        const codeCol = findCol(['الرقم الوزاري', 'رقم الوزاري', 'الرمز الوزاري', 'كود المدرسة', 'رمز المدرسة', 'الرقم_الوزاري', 'الكود الوزاري']);
+        const stageCol = findCol(['المرحلة', 'المرحلة الدراسية', 'المرحلة التعليمية', 'المرحله']);
+        const sectorCol = findCol(['القطاع', 'مكتب التعليم', 'القطاع التعليمي', 'الادارة', 'المنطقة', 'الحي']);
+        const genderCol = findCol(['الجنس', 'النوع', 'بنين/بنات', 'بنين وبنات']);
+        const principalNameCol = findCol(['اسم مدير المدرسة', 'اسم المدير', 'مدير المدرسة', 'اسم قائد المدرسة', 'قائد المدرسة']);
+        const principalCivilIdCol = findCol(['السجل المدني', 'رقم السجل المدني', 'هوية مدير المدرسة', 'رقم الهوية']);
+        const principalMobileCol = findCol(['رقم جوال مدير المدرسة', 'جوال مدير المدرسة', 'الجوال', 'رقم الجوال']);
+
+        const parsedSchools: SchoolItem[] = [];
+
+        rawJson.forEach((row, idx) => {
+          const rawName = schoolNameCol ? String(row[schoolNameCol] || '').trim() : '';
+          const rawCode = codeCol ? String(row[codeCol] || '').trim() : '';
+          if (!rawName && !rawCode) return; // skip blank row
+
+          const sName = rawName || ('مدرسة_' + (idx + 1));
+          const mCode = rawCode || String(1000 + idx);
+
+          let stage = 'Primary';
+          const rawStage = stageCol ? String(row[stageCol] || '') : '';
+          if (rawStage.includes('ثانوي')) stage = 'Secondary';
+          else if (rawStage.includes('متوسط')) stage = 'Intermediate';
+          else if (rawStage.includes('روض') || rawStage.includes('طفول')) stage = 'Kindergarten';
+          else if (rawStage.includes('مجمع')) stage = 'All';
+
+          let gender: 'boys' | 'girls' = 'boys';
+          const rawGen = genderCol ? String(row[genderCol] || '') : '';
+          if (rawGen.includes('بنات') || rawGen.includes('أنثى')) gender = 'girls';
+
+          const sector = sectorCol ? String(row[sectorCol] || '').trim() || 'القطاع الشمالي' : 'القطاع الشمالي';
+          const pName = principalNameCol ? String(row[principalNameCol] || '').trim() : '';
+          const pCivilId = principalCivilIdCol ? String(row[principalCivilIdCol] || '').trim().replace(/\D/g, '') : '';
+          const pMobile = principalMobileCol ? String(row[principalMobileCol] || '').trim() : '';
+
+          parsedSchools.push({
+            id: 'sch_' + Date.now() + '_' + idx,
+            name: sName,
+            nameAr: sName,
+            nameEn: sName,
+            code: mCode,
+            ministryCode: mCode,
+            stage,
+            sector,
+            district: sector,
+            gender,
+            principalName: pName || undefined,
+            principalCivilId: pCivilId || undefined,
+            principalId: pCivilId || undefined,
+            principalMobile: pMobile || undefined,
+            customFields: {
+              ...row,
+              'اسم المدرسة': sName,
+              'الرقم الوزاري': mCode
+            }
+          });
+        });
+
+        if (parsedSchools.length === 0) {
+          setClaimToastMessage('لم يتم العثور على سجلات مدارس صالحة في الملف المرفوع');
+          return;
+        }
+
+        setSchoolParsedData({
+          fileName: file.name,
+          totalRows: parsedSchools.length,
+          rows: parsedSchools,
+          rawHeaders
+        });
+        setShowSchoolImportModal(true);
+      } catch (err: any) {
+        console.error(err);
+        setClaimToastMessage('خطأ في معالجة ملف الإكسل: ' + (err.message || ''));
+      } finally {
+        if (schoolFileInputRef.current) schoolFileInputRef.current.value = '';
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  // Commit School Import
+  const handleCommitSchoolImport = () => {
+    if (!schoolParsedData || schoolParsedData.rows.length === 0) return;
+    const newSchools = schoolParsedData.rows;
+    if (schoolImportMode === 'replace') {
+      onImportSchools(newSchools, true);
+      setClaimToastMessage();
+    } else {
+      onImportSchools(newSchools, false);
+      setClaimToastMessage();
+    }
+    setShowSchoolImportModal(false);
+    setSchoolParsedData(null);
+  };
+
+  // Confirm Clear All Schools
+  const handleConfirmClearSchools = () => {
+    onImportSchools([], true);
+    setShowClearSchoolsConfirmModal(false);
+    setClaimToastMessage('🗑️ تم حذف جميع بيانات المدارس الحالية بنجاح');
+  };
+
+  // Export Schools Directory to Excel
+  const handleExportSchoolsExcel = () => {
+    if (schools.length === 0) {
+      setClaimToastMessage('لا توجد بيانات مدارس لتصديرها');
+      return;
+    }
+    const rows = schools.map((s, idx) => ({
+      'م': idx + 1,
+      'اسم المدرسة': s.name || s.nameAr || '',
+      'الرقم الوزاري': s.code || s.ministryCode || '',
+      'المرحلة': s.stage === 'Secondary' ? 'ثانوي' : s.stage === 'Intermediate' ? 'متوسط' : s.stage === 'Kindergarten' ? 'رياض أطفال' : s.stage === 'All' ? 'مجمع' : 'ابتدائي',
+      'القطاع': s.sector || s.district || 'المدينة المنورة',
+      'النوع': s.gender === 'girls' ? 'بنات' : 'بنين',
+      'اسم مدير المدرسة': s.principalName || (s as any).customFields?.['اسم مدير المدرسة'] || '—',
+      'السجل المدني للمدير': s.principalCivilId || (s as any).customFields?.['السجل المدني'] || '—',
+      'جوال المدير': s.principalMobile || (s as any).customFields?.['رقم جوال مدير المدرسة'] || '—'
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    (ws as any)['!views'] = [{ RTL: true }];
+    const wb = XLSX.utils.book_new();
+    wb.Workbook = { Views: [{ RTL: true }] };
+    XLSX.utils.book_append_sheet(wb, ws, 'دليل المدارس');
+    XLSX.writeFile(wb, );
+    setClaimToastMessage();
+  };
+
   const handleAddSchool = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSchool.name || !newSchool.code) return;
@@ -2220,7 +2404,7 @@ export default function Dashboard({
                  <div className="flex-1">
                     <div className="text-sm sm:text-base font-black leading-snug">دليل المدارس والأرقام الوزارية</div>
                     <div className={`mt-2 px-3 py-1 rounded-xl text-xs sm:text-sm font-black border tracking-wide inline-flex items-center gap-1 shadow-xs ${activeFeature === 'schools' ? 'bg-white/25 text-white border-white/30' : 'bg-teal-100 text-teal-950 border-teal-300 dark:bg-teal-950 dark:text-teal-200 dark:border-teal-700'}`}>
-                       {stats.schoolsCount > 0 ? stats.schoolsCount : '2940'} مدرسة
+                       {stats.schoolsCount.toLocaleString('ar-SA')} مدرسة
                     </div>
                  </div>
               </button>
@@ -4374,9 +4558,18 @@ export default function Dashboard({
           </div>
         )}
 
-        {/* VIEW 10: SCHOOLS DIRECTORY (دليل المدارس والأرقام الوزارية - 2940) */}
+        {/* VIEW 10: SCHOOLS DIRECTORY (دليل المدارس والأرقام الوزارية) */}
         {activeFeature === 'schools' && (
           <div className="space-y-6">
+            {/* Hidden Excel File Input for Schools */}
+            <input 
+              type="file" 
+              ref={schoolFileInputRef} 
+              onChange={handleSchoolExcelUpload} 
+              accept=".xlsx, .xls, .csv" 
+              className="hidden" 
+            />
+
             <div className={`p-6 rounded-[32px] border border-slate-100 dark:border-teal-800/20 shadow-xs ${isDark ? 'bg-[#081e2b]' : 'bg-white'}`}>
                <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
                   <div className="flex items-center gap-3">
@@ -4384,17 +4577,59 @@ export default function Dashboard({
                         <School className="w-6 h-6" />
                      </div>
                      <div>
-                        <h2 className="text-lg font-black text-slate-900 dark:text-white">دليل المدارس والأرقام الوزارية (2,940 مدرسة)</h2>
+                        <h2 className="text-lg font-black text-slate-900 dark:text-white">
+                          دليل المدارس والأرقام الوزارية ({schools.length.toLocaleString('ar-SA')} مدرسة)
+                        </h2>
                         <p className="text-xs font-bold text-slate-400">البحث في دليل مدارس منطقة المدينة المنورة، الرموز الوزارية، والطاقة الاستيعابية.</p>
                      </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  
+                  {/* Action Toolbar */}
+                  <div className="flex flex-wrap items-center gap-2.5">
+                     {/* Export Schools */}
                      <button 
-                       onClick={() => setShowAddSchoolModal(true)}
-                       className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black flex items-center gap-2 cursor-pointer shadow-sm"
+                       type="button"
+                       onClick={handleExportSchoolsExcel}
+                       className={`px-3.5 py-2 rounded-xl text-xs font-black border flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
+                         isDark ? 'bg-slate-900 border-teal-800/40 text-slate-200 hover:bg-slate-800' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                       }`}
+                       title="تصدير دليل المدارس الحالي إلى ملف إكسل"
                      >
-                        <Plus className="w-4 h-4" />
-                        إضافة مدرسة جديدة
+                        <Download className="w-3.5 h-3.5 text-teal-600" />
+                        <span>تصدير Excel</span>
+                     </button>
+
+                     {/* Upload Schools Excel */}
+                     <button 
+                       type="button"
+                       onClick={() => schoolFileInputRef.current?.click()}
+                       className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                       title="رفع واستيراد ملف إكسل لدليل المدارس والأرقام الوزارية"
+                     >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>رفع ملف الإكسل</span>
+                     </button>
+
+                     {/* Add School Manually */}
+                     <button 
+                       type="button"
+                       onClick={() => setShowAddSchoolModal(true)}
+                       className="px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                       title="إضافة مدرسة يدوياً للدليل"
+                     >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>إضافة مدرسة جديدة</span>
+                     </button>
+
+                     {/* Clear Current Schools Data */}
+                     <button 
+                       type="button"
+                       onClick={() => setShowClearSchoolsConfirmModal(true)}
+                       className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800/40 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer"
+                       title="حذف وتفريغ جميع بيانات المدارس الحالية"
+                     >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        <span>حذف البيانات الحالية</span>
                      </button>
                   </div>
                </div>
@@ -4422,37 +4657,57 @@ export default function Dashboard({
                         </tr>
                      </thead>
                      <tbody className="divide-y divide-slate-100 dark:divide-teal-800/10">
-                        {schools
-                          .filter(s => 
-                            (s.name || '').includes(schoolSearchQuery) || 
-                            (s.code || '').includes(schoolSearchQuery) || 
-                            (s.sector || '').includes(schoolSearchQuery)
-                          )
-                          .slice(0, 100)
-                          .map(school => (
-                            <tr key={school.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/50">
-                               <td className="p-3 font-bold text-slate-800 dark:text-white">{school.name}</td>
-                               <td className="p-3 font-mono text-teal-600">{school.code}</td>
-                               <td className="p-3">{school.stage}</td>
-                               <td className="p-3">{school.sector}</td>
-                               <td className="p-3">{school.gender === 'boys' ? 'بنين' : 'بنات'}</td>
-                               <td className="p-3 text-center">
-                                  <button 
-                                    onClick={() => onDeleteSchool(school.id)}
-                                    className="p-1 text-rose-500 hover:bg-rose-50 rounded cursor-pointer"
-                                  >
-                                     <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                               </td>
-                            </tr>
-                          ))}
+                        {schools.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="p-12 text-center text-slate-400">
+                              <div className="flex flex-col items-center justify-center gap-3">
+                                <School className="w-12 h-12 text-slate-300 dark:text-slate-700" />
+                                <div className="font-bold text-sm text-slate-700 dark:text-slate-200">لا توجد مدارس مسجلة حالياً في الدليل</div>
+                                <p className="text-xs text-slate-400 max-w-sm">تم تفريغ الدليل. يمكنك رفع ملف إكسل يحتوي على بيانات المدارس أو إضافة مدرسة جديدة.</p>
+                                <button
+                                  type="button"
+                                  onClick={() => schoolFileInputRef.current?.click()}
+                                  className="mt-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-2 cursor-pointer shadow-sm"
+                                >
+                                  <Upload className="w-4 h-4" />
+                                  <span>رفع ملف الإكسل الآن</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : (
+                          schools
+                            .filter(s => 
+                              (s.name || s.nameAr || '').includes(schoolSearchQuery) || 
+                              (s.code || s.ministryCode || '').includes(schoolSearchQuery) || 
+                              (s.sector || s.district || '').includes(schoolSearchQuery)
+                            )
+                            .slice(0, 100)
+                            .map(school => (
+                              <tr key={school.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/50">
+                                 <td className="p-3 font-bold text-slate-800 dark:text-white">{school.name || school.nameAr}</td>
+                                 <td className="p-3 font-mono text-teal-600">{school.code || school.ministryCode}</td>
+                                 <td className="p-3">{school.stage}</td>
+                                 <td className="p-3">{school.sector || school.district || '—'}</td>
+                                 <td className="p-3">{school.gender === 'boys' ? 'بنين' : 'بنات'}</td>
+                                 <td className="p-3 text-center">
+                                    <button 
+                                      onClick={() => onDeleteSchool(school.id)}
+                                      className="p-1 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded cursor-pointer"
+                                      title="حذف المدرسة"
+                                    >
+                                       <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                 </td>
+                              </tr>
+                            ))
+                        )}
                      </tbody>
                   </table>
                </div>
             </div>
           </div>
         )}
-
         {/* VIEW 11: SATISFACTION (قياس رضا المستفيدين) */}
         {activeFeature === 'satisfaction' && (
           <div className="space-y-6">
@@ -4892,6 +5147,192 @@ export default function Dashboard({
         </div>
       )}
 
+            {/* MODAL: CLEAR ALL SCHOOLS CONFIRMATION */}
+      {showClearSchoolsConfirmModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className={`rounded-3xl max-w-md w-full p-6 space-y-5 border shadow-2xl ${
+            isDark ? 'bg-[#081e2b] border-teal-800/40 text-white' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            <div className="flex items-center gap-3 border-b pb-4 border-rose-100 dark:border-rose-900/30">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-black text-base text-slate-900 dark:text-white">
+                  تأكيد حذف بيانات المدارس الحالية
+                </h3>
+                <p className="text-xs font-bold text-rose-600 dark:text-rose-400 mt-0.5">
+                  تفريغ دليل المدارس والأرقام الوزارية
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-bold">
+              هل أنت متأكد من رغبتك في حذف جميع بيانات المدارس الحالية؟ سيتم تفريغ دليل المدارس بالكامل ({schools.length} مدرسة).
+            </p>
+
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/30 rounded-xl flex items-start gap-2 text-[11px] text-amber-800 dark:text-amber-300 font-bold">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>ملاحظة: يمكنك إعادة رفع دليل المدارس في أي وقت عبر خيار "رفع ملف الإكسل".</span>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowClearSchoolsConfirmModal(false)}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+              >
+                إلغاء التراجع
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmClearSchools}
+                className="px-4 py-2.5 rounded-xl text-xs font-black bg-rose-600 hover:bg-rose-700 text-white shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>نعم، حذف البيانات الحالية</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: PREVIEW & IMPORT SCHOOLS EXCEL */}
+      {showSchoolImportModal && schoolParsedData && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className={`rounded-3xl max-w-2xl w-full p-6 space-y-5 border shadow-2xl max-h-[90vh] overflow-y-auto ${
+            isDark ? 'bg-[#081e2b] border-teal-800/40 text-white' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            <div className="flex items-center justify-between border-b pb-4 dark:border-teal-800/30">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-teal-50 dark:bg-teal-950/60 text-teal-600 flex items-center justify-center shrink-0">
+                  <FileSpreadsheet className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base sm:text-lg text-slate-900 dark:text-white">
+                    معاينة واستيراد ملف إكسل دليل المدارس
+                  </h3>
+                  <p className="text-xs font-bold text-slate-400 font-mono mt-0.5">
+                    الملف: <span className="text-teal-600">{schoolParsedData.fileName}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSchoolImportModal(false);
+                  setSchoolParsedData(null);
+                }}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Stats Overview */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className={`p-4 rounded-2xl border ${isDark ? 'bg-slate-900/60 border-teal-800/30' : 'bg-slate-50 border-slate-200'}`}>
+                <div className="text-xs font-bold text-slate-400">إجمالي المدارس المقروءة</div>
+                <div className="text-xl font-black text-teal-600 font-mono mt-1">{schoolParsedData.totalRows} مدرسة</div>
+              </div>
+              <div className={`p-4 rounded-2xl border ${isDark ? 'bg-slate-900/60 border-teal-800/30' : 'bg-slate-50 border-slate-200'}`}>
+                <div className="text-xs font-bold text-slate-400">الأعمدة المكتشفة في الملف</div>
+                <div className="text-xs font-black text-slate-700 dark:text-slate-200 mt-2 truncate">
+                  {schoolParsedData.rawHeaders.slice(0, 5).join(' • ')}
+                </div>
+              </div>
+            </div>
+
+            {/* Import Mode Selector */}
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-700 dark:text-slate-300">اختر طريقة حفظ وتحديث الدليل في النظام:</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className={`p-4 rounded-2xl border cursor-pointer flex items-start gap-3 transition-all ${
+                  schoolImportMode === 'merge' ? 'bg-teal-500/10 border-teal-500 ring-2 ring-teal-500/20' : 'border-slate-200 dark:border-teal-800/30'
+                }`}>
+                  <input
+                    type="radio"
+                    name="schoolImportMode"
+                    checked={schoolImportMode === 'merge'}
+                    onChange={() => setSchoolImportMode('merge')}
+                    className="mt-1 accent-teal-600"
+                  />
+                  <div>
+                    <div className="text-xs font-black text-slate-900 dark:text-white">دمج وتحديث المدارس الحالية (موصى به)</div>
+                    <p className="text-[11px] font-bold text-slate-400 mt-0.5">تحديث بيانات المدارس القائمة وإضافة المدارس الجديدة دون مسح السجلات السابقة.</p>
+                  </div>
+                </label>
+
+                <label className={`p-4 rounded-2xl border cursor-pointer flex items-start gap-3 transition-all ${
+                  schoolImportMode === 'replace' ? 'bg-teal-500/10 border-teal-500 ring-2 ring-teal-500/20' : 'border-slate-200 dark:border-teal-800/30'
+                }`}>
+                  <input
+                    type="radio"
+                    name="schoolImportMode"
+                    checked={schoolImportMode === 'replace'}
+                    onChange={() => setSchoolImportMode('replace')}
+                    className="mt-1 accent-teal-600"
+                  />
+                  <div>
+                    <div className="text-xs font-black text-slate-900 dark:text-white">استبدال كامل الدليل بالملف الجديد</div>
+                    <p className="text-[11px] font-bold text-slate-400 mt-0.5">مسح دليل المدارس الحالي واعتماد المدارس والأرقام الوزارية الموجودة في هذا الملف فقط.</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Table Preview */}
+            <div className="space-y-2">
+              <div className="text-xs font-black text-slate-700 dark:text-slate-300">معاينة أولية من المدارس المقروءة:</div>
+              <div className="border border-slate-200 dark:border-teal-800/30 rounded-xl overflow-x-auto max-h-48 overflow-y-auto">
+                <table className="w-full text-right text-xs">
+                  <thead className={`sticky top-0 ${isDark ? 'bg-slate-950 text-slate-300' : 'bg-slate-100 text-slate-700'} font-black text-[11px]`}>
+                    <tr>
+                      <th className="p-2.5">اسم المدرسة</th>
+                      <th className="p-2.5">الرقم الوزاري</th>
+                      <th className="p-2.5">المرحلة</th>
+                      <th className="p-2.5">القطاع</th>
+                      <th className="p-2.5">النوع</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-teal-800/10">
+                    {schoolParsedData.rows.slice(0, 8).map((sch, i) => (
+                      <tr key={sch.id || i} className="hover:bg-teal-50/20">
+                        <td className="p-2.5 font-bold text-slate-900 dark:text-white">{sch.name || sch.nameAr}</td>
+                        <td className="p-2.5 font-mono text-teal-600">{sch.code || sch.ministryCode}</td>
+                        <td className="p-2.5 text-slate-600 dark:text-slate-400">{sch.stage}</td>
+                        <td className="p-2.5 text-slate-600 dark:text-slate-400">{sch.sector || sch.district || '—'}</td>
+                        <td className="p-2.5 text-slate-600 dark:text-slate-400">{sch.gender === 'boys' ? 'بنين' : 'بنات'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t dark:border-teal-800/20">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSchoolImportModal(false);
+                  setSchoolParsedData(null);
+                }}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleCommitSchoolImport}
+                className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black flex items-center gap-2 shadow-lg shadow-teal-900/20 cursor-pointer"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>اعتماد وحفظ دليل المدارس ({schoolParsedData.totalRows} مدرسة)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* MODAL 3: OFFICIAL REPORT MODAL */}
       {showOfficialModal && officialReportData && (
         <OfficialReportModal 

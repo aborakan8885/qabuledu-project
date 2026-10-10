@@ -24,7 +24,9 @@ import {
   saveSchoolsToStorage,
   loadSchoolsFromStorage,
   saveInquiriesToStorage,
-  loadInquiriesFromStorage
+  loadInquiriesFromStorage,
+  syncDataWithServer,
+  fetchServerSyncedData
 } from './utils/storageEngine';
 import {
   INITIAL_CONFIG,
@@ -35,7 +37,7 @@ import {
   TRANSLATIONS
 } from './data/mockData';
 import { processSurveysInBatchAsync } from './utils/batchProcessor';
-import { ShieldCheck, Wifi, Info, CheckCircle2, ChevronRight, HelpCircle, Cpu, Zap, Activity, MessageSquareHeart, Home, RotateCcw, Loader2, Code2 } from 'lucide-react';
+import { ShieldCheck, Wifi, Info, CheckCircle2, ChevronRight, HelpCircle, Cpu, Zap, Activity, MessageSquareHeart, Home, RotateCcw, Loader2, Code2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -322,6 +324,8 @@ export default function App() {
   };
 
   const [schoolsList, setSchoolsList] = useState<SchoolItem[]>(() => {
+    const isCleared = localStorage.getItem('app_schools_cleared');
+    if (isCleared === 'true') return [];
     const cached = localStorage.getItem('app_schools_list_v1');
     if (cached) {
       try {
@@ -338,10 +342,16 @@ export default function App() {
     if (!newList || !Array.isArray(newList)) return;
     if (isExplicitAdminClear) {
       setSchoolsList(newList);
+      if (newList.length === 0) {
+        localStorage.setItem('app_schools_cleared', 'true');
+      } else {
+        localStorage.removeItem('app_schools_cleared');
+      }
       saveSchoolsToStorage(newList, { isConfirmedAdminClear: true });
       return;
     }
-    // حماية صارمة: دمج وتحديث المدارس والارقام الوزارية وبيانات المديرين دون حذف البيانات السابقة
+    localStorage.removeItem('app_schools_cleared');
+    // دمج وتحديث المدارس والارقام الوزارية وبيانات المديرين مع الحفاظ على البيانات السابقة
     setSchoolsList(prev => {
       const mergedMap = new Map<string, SchoolItem>();
       (prev || []).forEach(s => {
@@ -365,6 +375,15 @@ export default function App() {
 
   const [alertToast, setAlertToast] = useState<{ message: string; type: 'success' | 'info' | 'warning' } | null>(null);
 
+  // Auto-dismiss alert toast after 3.5 seconds
+  useEffect(() => {
+    if (!alertToast) return;
+    const timer = setTimeout(() => {
+      setAlertToast(null);
+    }, 3500);
+    return () => clearTimeout(timer);
+  }, [alertToast]);
+
   const [isProcessingBatch, setIsProcessingBatch] = useState<boolean>(false);
   const [batchProgress, setBatchProgress] = useState<number>(0);
   const [batchDetails, setBatchDetails] = useState<string>('');
@@ -373,31 +392,76 @@ export default function App() {
     Promise.all([
       loadSurveysFromStorage(),
       loadPrincipalReportsFromStorage(),
-      loadSchoolsFromStorage()
-    ]).then(([surveysData, reportsData, schoolsData]) => {
-      if (surveysData && surveysData.length > 0) {
-        setSurveys(prev => {
-          // Merge preserving all requests
-          const merged = new Map<string, SurveyResponse>();
-          prev.forEach(s => { if (s && s.id) merged.set(s.id, s); });
-          surveysData.forEach(s => { if (s && s.id) merged.set(s.id, s); });
-          return Array.from(merged.values());
-        });
-      }
-      if (reportsData && reportsData.length > 0) {
-        setPrincipalReports(prev => {
-          const merged = new Map<string, PrincipalReport>();
-          prev.forEach(r => { if (r && r.id) merged.set(r.id, r); });
-          reportsData.forEach(r => { if (r && r.id) merged.set(r.id, r); });
-          return Array.from(merged.values());
-        });
-      }
-      if (schoolsData && Array.isArray(schoolsData) && schoolsData.length > 0) {
-        setSchoolsList(schoolsData);
+      loadSchoolsFromStorage(),
+      fetchServerSyncedData()
+    ]).then(([surveysData, reportsData, schoolsData, serverData]) => {
+      // 1. Surveys: Merge local + server data strictly without dropping any transactions
+      setSurveys(prev => {
+        const merged = new Map<string, SurveyResponse>();
+        // Add existing state
+        prev.forEach(s => { if (s && s.id) merged.set(s.id, s); });
+        // Merge IndexedDB data
+        (surveysData || []).forEach(s => { if (s && s.id) merged.set(s.id, s); });
+        // Merge Server synced data
+        if (serverData?.surveys && Array.isArray(serverData.surveys)) {
+          serverData.surveys.forEach((s: SurveyResponse) => { if (s && s.id) merged.set(s.id, s); });
+        }
+        return Array.from(merged.values());
+      });
+
+      // 2. Principal Reports: Merge local + server
+      setPrincipalReports(prev => {
+        const merged = new Map<string, PrincipalReport>();
+        prev.forEach(r => { if (r && r.id) merged.set(r.id, r); });
+        (reportsData || []).forEach(r => { if (r && r.id) merged.set(r.id, r); });
+        if (serverData?.principalReports && Array.isArray(serverData.principalReports)) {
+          serverData.principalReports.forEach((r: PrincipalReport) => { if (r && r.id) merged.set(r.id, r); });
+        }
+        return Array.from(merged.values());
+      });
+
+      // 3. Schools & Principals: Strict protection of uploaded records
+      const isCleared = localStorage.getItem('app_schools_cleared') === 'true' || serverData?.schoolsCleared === true;
+      if (isCleared) {
+        setSchoolsList([]);
       } else {
-        // Guarantee default schools list is preserved
-        setSchoolsList(prev => (prev && prev.length > 0 ? prev : INITIAL_SCHOOLS));
+        const schMap = new Map<string, SchoolItem>();
+        (schoolsData || []).forEach(s => {
+          const k = s.ministryCode || s.code || s.id || s.nameAr;
+          if (k) schMap.set(String(k).trim(), s);
+        });
+        if (serverData?.schools && Array.isArray(serverData.schools)) {
+          serverData.schools.forEach((s: SchoolItem) => {
+            const k = s.ministryCode || s.code || s.id || s.nameAr;
+            if (k) {
+              const ex = schMap.get(String(k).trim());
+              schMap.set(String(k).trim(), ex ? { ...ex, ...s } : s);
+            }
+          });
+        }
+        const resolvedSchools = Array.from(schMap.values());
+        if (resolvedSchools.length > 0) {
+          setSchoolsList(resolvedSchools);
+        } else {
+          setSchoolsList(prev => (prev && prev.length > 0 ? prev : INITIAL_SCHOOLS));
+        }
       }
+
+      // 4. Inquiries: Merge server inquiries if available
+      if (serverData?.inquiries && Array.isArray(serverData.inquiries) && serverData.inquiries.length > 0) {
+        setInquiries(prev => {
+          const inqMap = new Map<string, BeneficiaryInquiry>();
+          prev.forEach(i => { if (i && i.id) inqMap.set(i.id, i); });
+          serverData.inquiries.forEach((i: BeneficiaryInquiry) => { if (i && i.id) inqMap.set(i.id, i); });
+          return Array.from(inqMap.values());
+        });
+      }
+
+      // 5. Config: Merge custom settings if available on server
+      if (serverData?.config && typeof serverData.config === 'object') {
+        setConfig(prev => ({ ...prev, ...serverData.config }));
+      }
+
       setIsInitialLoaded(true);
     }).catch(err => {
       console.warn('Initial storage load fallback:', err);
@@ -409,7 +473,8 @@ export default function App() {
     if (!isInitialLoaded) return;
     const timer = setTimeout(() => {
       saveSurveysToStorage(surveys);
-    }, 1500);
+      syncDataWithServer({ surveys });
+    }, 2000);
     return () => clearTimeout(timer);
   }, [surveys, isInitialLoaded]);
 
@@ -417,7 +482,11 @@ export default function App() {
     if (!isInitialLoaded) return;
     const timer = setTimeout(() => {
       saveSchoolsToStorage(schoolsList, { isConfirmedAdminClear: true });
-    }, 1000);
+      syncDataWithServer({ 
+        schools: schoolsList, 
+        isExplicitAdminClear: localStorage.getItem('app_schools_cleared') === 'true' 
+      });
+    }, 1500);
     return () => clearTimeout(timer);
   }, [schoolsList, isInitialLoaded]);
 
@@ -425,9 +494,18 @@ export default function App() {
     if (!isInitialLoaded) return;
     const timer = setTimeout(() => {
       savePrincipalReportsToStorage(principalReports);
-    }, 1500);
+      syncDataWithServer({ principalReports });
+    }, 2000);
     return () => clearTimeout(timer);
   }, [principalReports, isInitialLoaded]);
+
+  useEffect(() => {
+    if (!isInitialLoaded) return;
+    const timer = setTimeout(() => {
+      syncDataWithServer({ inquiries, config });
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [inquiries, config, isInitialLoaded]);
 
   const handleAddSurvey = (newSurveyData: Omit<SurveyResponse, 'id' | 'createdAt' | 'isSynced'>): SurveyResponse => {
     const surveyId = `SURV-${Math.floor(100 + Math.random() * 900)}`;
@@ -740,13 +818,25 @@ export default function App() {
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            className={`fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-full shadow-2xl border ${
+            onClick={() => setAlertToast(null)}
+            className={`fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-full shadow-2xl border flex items-center gap-3 cursor-pointer select-none transition-transform hover:scale-105 active:scale-95 ${
               alertToast.type === 'success' ? 'bg-emerald-600 border-emerald-400 text-white' :
               alertToast.type === 'warning' ? 'bg-amber-600 border-amber-400 text-white' :
               'bg-blue-600 border-blue-400 text-white'
             }`}
           >
-            {alertToast.message}
+            <span className="font-bold text-xs sm:text-sm">{alertToast.message}</span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setAlertToast(null);
+              }}
+              className="p-1 hover:bg-white/20 rounded-full transition-colors cursor-pointer text-white/80 hover:text-white"
+              title="إغلاق الإشعار"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
