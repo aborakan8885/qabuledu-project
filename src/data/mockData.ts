@@ -6,7 +6,7 @@
 import { SurveyResponse, EmailLog, SystemIntegrationLog, AppConfig, SchoolItem } from '../types';
 
 export const EMPLOYEES = [
-  { id: 'emp_1', nameAr: 'سالم بن محمد الترجمي', nameEn: 'Salem Al-Turjumi' }
+  { id: 'emp_1', nameAr: 'سالم محمد الترجمي', nameEn: 'Salem Mohammed Al-Turjumi' }
 ];
 
 export const ADMIN_UNITS = [
@@ -22,10 +22,11 @@ export const ADMIN_UNITS = [
 export const OFFICIAL_ADMINS = [
   { 
     nationalId: '1068575628', 
-    nameAr: 'سالم بن محمد الترجمي', 
+    nameAr: 'سالم محمد الترجمي', 
+    mobile: '0553512200',
     unit: 'الإدارة العامة ورعاية المستفيدين والنظام', 
     role: 'admin',
-    roleDesc: 'مدير النظام - كامل الصلاحيات وإدارة المستخدمين والمدارس'
+    roleDesc: 'مدير النظام (الأدمن الحصري والوحيد) - كامل الصلاحيات وإدارة المستخدمين والمدارس'
   },
   { 
     nationalId: '1234567890', 

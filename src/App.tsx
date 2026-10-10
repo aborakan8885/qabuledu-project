@@ -10,8 +10,9 @@ import SurveyForm from './components/SurveyForm';
 import Portal from './components/Portal';
 import ErrorBoundary from './components/ErrorBoundary';
 import ContactFeedbackModal from './components/ContactFeedbackModal';
+import InquiriesModal from './components/InquiriesModal';
 import SiteAccessGate from './components/SiteAccessGate';
-import { Language, SurveyResponse, AppConfig, EmailLog, SystemIntegrationLog, PrincipalReport, SchoolItem, BeneficiaryFeedback } from './types';
+import { Language, SurveyResponse, AppConfig, EmailLog, SystemIntegrationLog, PrincipalReport, SchoolItem, BeneficiaryFeedback, BeneficiaryInquiry } from './types';
 import { sendOfficialEmail } from './utils/emailService';
 import { getSafeTranslation } from './utils/translationHelper';
 import {
@@ -21,7 +22,9 @@ import {
   savePrincipalReportsToStorage,
   loadPrincipalReportsFromStorage,
   saveSchoolsToStorage,
-  loadSchoolsFromStorage
+  loadSchoolsFromStorage,
+  saveInquiriesToStorage,
+  loadInquiriesFromStorage
 } from './utils/storageEngine';
 import {
   INITIAL_CONFIG,
@@ -249,6 +252,73 @@ export default function App() {
     };
     setBeneficiaryFeedbacks(prev => [item, ...prev]);
     setAlertToast({ message: 'تم إرسال ملاحظتك بنجاح للأدمن!', type: 'success' });
+  };
+
+  const [isInquiriesModalOpen, setIsInquiriesModalOpen] = useState<boolean>(false);
+
+  const [inquiries, setInquiries] = useState<BeneficiaryInquiry[]>(() => {
+    const cached = localStorage.getItem('beneficiary_inquiries_v1');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      } catch { /* ignore */ }
+    }
+    return [
+      {
+        id: 'inq-101',
+        senderName: 'عبدالله بن سعد الحربي',
+        senderPhone: '0554433221',
+        inquiryText: 'السلام عليكم، أود الاستفسار عن إمكانية نقل ابني في الصف الثالث الابتدائي إلى مدرسة قريبة من حي العزيزية، وهل الشواغر متاحة حالياً؟',
+        createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
+        status: 'answered',
+        answeredByOfficerId: 'emp_followup',
+        answeredByOfficerName: 'عبدالرحيم الأحمدي (مشرف القبول والتسجيل)',
+        officerReply: 'وعليكم السلام ورحمة الله وبركاته. مرحباً بك أخي الكريم، نعم تم التحقق من المدارس المجاورة بحي العزيزية وتوجد شواغر متاحة بمدرسة ابن كثير الابتدائية، يمكنك تقديم طلب النقل وسيتم التسكين مباشرة بإذن الله.',
+        answeredAt: new Date(Date.now() - 3600000 * 2).toISOString(),
+        beneficiaryRating: 5,
+        beneficiaryFeedbackNotes: 'خدمة ممتازة وسريعة جداً، شكراً جزيلاً للأستاذ عبدالرحيم الأحمدي على تجاوبه السريع والوافي.',
+        ratedAt: new Date(Date.now() - 3600000 * 1).toISOString()
+      },
+      {
+        id: 'inq-102',
+        senderName: 'فاطمة بنت أحمد الزهراني',
+        senderPhone: '0501239874',
+        inquiryText: 'أرغب بالاستفسار عن موعد انتهاء فترة معادلة الشهادات الصادرة من خارج المملكة للمرحلة المتوسطة، وما هي المستندات المطلوبة مسبقاً؟',
+        createdAt: new Date(Date.now() - 3600000 * 2.5).toISOString(),
+        status: 'new'
+      }
+    ];
+  });
+
+  useEffect(() => {
+    saveInquiriesToStorage(inquiries);
+  }, [inquiries]);
+
+  const handleAddInquiry = (newInq: Omit<BeneficiaryInquiry, 'id' | 'createdAt' | 'status'>) => {
+    const item: BeneficiaryInquiry = {
+      ...newInq,
+      id: `inq-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      status: 'new'
+    };
+    setInquiries(prev => [item, ...prev]);
+    setAlertToast({ message: 'تم إرسال استفسارك بنجاح لمسؤول القبول!', type: 'success' });
+  };
+
+  const handleRateInquiry = (inquiryId: string, rating: number, notes?: string) => {
+    setInquiries(prev => prev.map(inq => {
+      if (inq.id === inquiryId) {
+        return {
+          ...inq,
+          beneficiaryRating: rating,
+          beneficiaryFeedbackNotes: notes || inq.beneficiaryFeedbackNotes,
+          ratedAt: new Date().toISOString()
+        };
+      }
+      return inq;
+    }));
+    setAlertToast({ message: 'تم حفظ تقييمك للخدمة بنجاح ⭐', type: 'success' });
   };
 
   const [schoolsList, setSchoolsList] = useState<SchoolItem[]>(() => {
@@ -559,6 +629,7 @@ export default function App() {
                   onAgeModalChange={handleAgeModalChange}
                   principalSession={principalSession}
                   onPrincipalSessionChange={setPrincipalSession}
+                  onOpenInquiries={() => setIsInquiriesModalOpen(true)}
                 />
               </ErrorBoundary>
             </div>
@@ -616,6 +687,8 @@ export default function App() {
                     theme={theme}
                     beneficiaryFeedbacks={beneficiaryFeedbacks}
                     onUpdateBeneficiaryFeedbacks={setBeneficiaryFeedbacks}
+                    inquiries={inquiries}
+                    onUpdateInquiries={setInquiries}
                   />
                 </Suspense>
               </ErrorBoundary>
@@ -660,6 +733,17 @@ export default function App() {
         onClose={() => setIsFeedbackModalOpen(false)}
         onSendFeedback={handleSendFeedback}
         isDark={isDark}
+      />
+
+      {/* Inquiries & Communication Modal (الاستفسارات والتواصل) */}
+      <InquiriesModal
+        isOpen={isInquiriesModalOpen}
+        onClose={() => setIsInquiriesModalOpen(false)}
+        inquiries={inquiries}
+        onAddInquiry={handleAddInquiry}
+        onRateInquiry={handleRateInquiry}
+        isDark={isDark}
+        isRtl={currentLang === 'ar'}
       />
       
       {/* Floating Action Buttons Matching Requested Adjustments */}

@@ -1,6 +1,5 @@
-// High-Performance Secured IndexedDB + LocalStorage Hybrid Persistence Engine
 import * as XLSX from 'xlsx';
-import { SurveyResponse, PrincipalReport, SchoolItem, OfficerUser, BeneficiaryFeedback, ProblemType } from '../types';
+import { SurveyResponse, PrincipalReport, SchoolItem, OfficerUser, BeneficiaryFeedback, BeneficiaryInquiry, ProblemType } from '../types';
 
 const DB_NAME = 'MoeSmartSystemDB_v2';
 const DB_VERSION = 2;
@@ -10,6 +9,7 @@ const STORE_SCHOOLS = 'schools';
 const STORE_OFFICERS = 'officers';
 const STORE_FEEDBACKS = 'feedbacks';
 const STORE_SNAPSHOTS = 'snapshots';
+const STORE_INQUIRIES = 'inquiries';
 
 // مفتاح تشفير محلي ثابت مخصص للمتصفح لحماية الهويات والجوالات محلياً
 const ENCRYPTION_SALT = 'MoeSmartSecureSalt_2026';
@@ -323,20 +323,20 @@ export async function loadPrincipalReportsFromStorage(): Promise<PrincipalReport
 // ----------------------------------------------------
 const PRIMARY_SUPER_ADMIN: OfficerUser = {
   id: 'emp_1',
-  nameAr: 'سالم بن محمد الترجمي',
-  fullNameQuad: 'سالم بن محمد الترجمي',
+  nameAr: 'سالم محمد الترجمي',
+  fullNameQuad: 'سالم محمد الترجمي',
   nationalId: '1068575628',
   personalEmail: 'salem.turjumi@gmail.com',
-  nameEn: 'Salem Al-Turjumi',
+  nameEn: 'Salem Mohammed Al-Turjumi',
   role: 'admin',
-  mobile: '0551112222',
+  mobile: '0553512200',
   isActive: true,
   password: 'salim123321rs&1',
   canGrantRoles: true,
   canDeleteUsers: true,
   canAddUsers: true,
   workField: 'الإدارة العامة ورعاية المستفيدين والنظام',
-  roleDescription: 'مدير النظام - كامل الصلاحيات وإدارة المستخدمين والمدارس'
+  roleDescription: 'مدير النظام (الأدمن الحصري والوحيد) - كامل الصلاحيات وإدارة المستخدمين والمدارس'
 };
 
 export const DEMO_OFFICERS: OfficerUser[] = [
@@ -397,8 +397,33 @@ export const DEMO_OFFICERS: OfficerUser[] = [
 export async function saveOfficersToStorage(officers: OfficerUser[]): Promise<void> {
   if (!officers || !Array.isArray(officers) || officers.length === 0) return;
   
-  // Guarantee Primary Super Admin is included and never deleted
-  const listToSave = [...officers];
+  // Guarantee Primary Super Admin is included and never deleted, and NO other user has admin role
+  const listToSave = officers.map(o => {
+    if (o.nationalId === '1068575628' || o.id === 'emp_1') {
+      return {
+        ...o,
+        ...PRIMARY_SUPER_ADMIN,
+        isActive: true,
+        role: 'admin' as const
+      };
+    }
+    // Strict enforcement: Only Salem Mohammed Al-Tarjami (1068575628) has admin permissions
+    if (o.role === 'admin') {
+      return {
+        ...o,
+        role: 'supervisor' as const,
+        canGrantRoles: false,
+        canDeleteUsers: false,
+        canAddUsers: false
+      };
+    }
+    return {
+      ...o,
+      canGrantRoles: false,
+      canDeleteUsers: false
+    };
+  });
+
   const adminIdx = listToSave.findIndex(o => o.nationalId === '1068575628' || o.id === 'emp_1');
   if (adminIdx === -1) {
     listToSave.unshift(PRIMARY_SUPER_ADMIN);
@@ -462,16 +487,31 @@ export async function loadOfficersFromStorage(): Promise<OfficerUser[]> {
     }
   });
 
-  // Ensure Primary Super Admin is always active and has correct data
+  // Ensure Primary Super Admin is always active and has correct data, and ONLY Salem has admin permissions
   list = list.map(o => {
     if (o.nationalId === '1068575628' || o.id === 'emp_1') {
       return {
         ...o,
         ...PRIMARY_SUPER_ADMIN,
-        isActive: true
+        isActive: true,
+        role: 'admin' as const
       };
     }
-    return o;
+    // Strict enforcement: all other users cannot have admin permissions under any circumstances
+    if (o.role === 'admin') {
+      return {
+        ...o,
+        role: 'supervisor' as const,
+        canGrantRoles: false,
+        canDeleteUsers: false,
+        canAddUsers: false
+      };
+    }
+    return {
+      ...o,
+      canGrantRoles: false,
+      canDeleteUsers: false
+    };
   });
 
   return list;
@@ -678,6 +718,71 @@ export function canOfficerHandleAdmissionRequests(officer: OfficerUser | undefin
 export function canOfficerHandleEquivalencyRequests(officer: OfficerUser | undefined | null): boolean {
   if (!officer) return false;
   return officer.role === 'admin' || officer.role === 'director' || officer.role === 'equivalency_supervisor' || Boolean(officer.canHandleEqualizations);
+}
+
+/**
+ * فحص ما إذا كان الموظف مسؤول قبول مسموح له بالوصول لصفحة الاستفسارات والتواصل والإجابة عليها
+ * يستطيع جميع مسؤولين القبول فقط هم من تظهر لهم هذه الاستفسارات ويستطيعون الاجابة عليها
+ */
+export function isAdmissionOfficer(officer: OfficerUser | undefined | null): boolean {
+  if (!officer) return false;
+  return (
+    officer.role === 'admin' ||
+    officer.role === 'director' ||
+    officer.role === 'supervisor' ||
+    officer.role === 'equivalency_supervisor' ||
+    (officer.workField && officer.workField.includes('قبول')) ||
+    (officer.nameAr && officer.nameAr.includes('قبول'))
+  );
+}
+
+// ----------------------------------------------------
+// 7. INQUIRIES PERSISTENCE (الاستفسارات والتواصل)
+// ----------------------------------------------------
+export async function saveInquiriesToStorage(inquiries: BeneficiaryInquiry[]): Promise<void> {
+  if (!inquiries || !Array.isArray(inquiries)) return;
+  try {
+    localStorage.setItem('beneficiary_inquiries_v1', JSON.stringify(inquiries));
+  } catch (err) {
+    console.warn('LocalStorage save inquiries failed:', err);
+  }
+}
+
+export async function loadInquiriesFromStorage(): Promise<BeneficiaryInquiry[]> {
+  try {
+    const cached = localStorage.getItem('beneficiary_inquiries_v1');
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {
+    /* ignore */
+  }
+  return [
+    {
+      id: 'inq-101',
+      senderName: 'عبدالله بن سعد الحربي',
+      senderPhone: '0554433221',
+      inquiryText: 'السلام عليكم، أود الاستفسار عن إمكانية نقل ابني في الصف الثالث الابتدائي إلى مدرسة قريبة من حي العزيزية، وهل الشواغر متاحة حالياً؟',
+      createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
+      status: 'answered',
+      answeredByOfficerId: 'emp_followup',
+      answeredByOfficerName: 'عبدالرحيم الأحمدي (مشرف القبول والتسجيل)',
+      officerReply: 'وعليكم السلام ورحمة الله وبركاته. مرحباً بك أخي الكريم، نعم تم التحقق من المدارس المجاورة بحي العزيزية وتوجد شواغر متاحة بمدرسة ابن كثير الابتدائية، يمكنك تقديم طلب النقل وسيتم التسكين مباشرة بإذن الله.',
+      answeredAt: new Date(Date.now() - 3600000 * 2).toISOString(),
+      beneficiaryRating: 5,
+      beneficiaryFeedbackNotes: 'خدمة ممتازة وسريعة جداً، شكراً جزيلاً للأستاذ عبدالرحيم الأحمدي على تجاوبه السريع والوافي.',
+      ratedAt: new Date(Date.now() - 3600000 * 1).toISOString()
+    },
+    {
+      id: 'inq-102',
+      senderName: 'فاطمة بنت أحمد الزهراني',
+      senderPhone: '0501239874',
+      inquiryText: 'أرغب بالاستفسار عن موعد انتهاء فترة معادلة الشهادات الصادرة من خارج المملكة للمرحلة المتوسطة، وما هي المستندات المطلوبة مسبقاً؟',
+      createdAt: new Date(Date.now() - 3600000 * 2.5).toISOString(),
+      status: 'new'
+    }
+  ];
 }
 
 export function getRequestTypeInfo(survey: SurveyResponse | undefined | null, isRtl: boolean = true): {

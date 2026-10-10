@@ -18,11 +18,12 @@ import {
   Check
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { BeneficiaryFeedback } from '../types';
+import { BeneficiaryFeedback, isSystemAdmin, OfficerUser } from '../types';
 
 interface BeneficiaryFeedbackViewProps {
   feedbacks: BeneficiaryFeedback[];
   onUpdateFeedbacks?: (feedbacks: BeneficiaryFeedback[]) => void;
+  activeOfficer?: OfficerUser;
   isDark?: boolean;
   isRtl?: boolean;
 }
@@ -30,6 +31,7 @@ interface BeneficiaryFeedbackViewProps {
 export default function BeneficiaryFeedbackView({
   feedbacks,
   onUpdateFeedbacks,
+  activeOfficer,
   isDark = false,
   isRtl = true
 }: BeneficiaryFeedbackViewProps) {
@@ -98,6 +100,10 @@ export default function BeneficiaryFeedbackView({
   };
 
   const handleExportExcel = () => {
+    if (activeOfficer && !isSystemAdmin(activeOfficer)) {
+      alert('عذراً، تصدير النتائج مقتصر حصرياً على مدير النظام (الأدمن) أ. سالم محمد الترجمي.');
+      return;
+    }
     // دالة أمنية لتطهير النصوص ومنع استغلال تفعيلات المعادلات في ملف الإكسل
     const sanitizeForExcel = (text: string | undefined | null): string => {
       if (!text) return 'غير محدد';

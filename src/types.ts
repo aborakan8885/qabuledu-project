@@ -265,6 +265,30 @@ export interface OfficerUser {
   fullNameQuad?: string; // الاسم الرباعي للمستخدم
 }
 
+/**
+ * بيانات الأدمن الوحيد المصرح له بصلاحيات مدير النظام
+ */
+export const ADMIN_CREDENTIALS = {
+  nationalId: '1068575628',
+  mobile: '0553512200',
+  nameAr: 'سالم محمد الترجمي'
+} as const;
+
+/**
+ * التحقق الصارم من صلاحية الأدمن (مدير النظام):
+ * مقتصرة حصرياً على الأستاذ سالم محمد الترجمي
+ * السجل المدني: 1068575628
+ * رقم الجوال: 0553512200
+ * بقية المستخدمين لا يملكون صلاحية الأدمن نهائياً.
+ */
+export const isSystemAdmin = (user?: { nationalId?: string; id?: string; role?: string; mobile?: string } | null): boolean => {
+  if (!user) return false;
+  const nid = (user.nationalId || '').trim();
+  const uid = (user.id || '').trim();
+  const isSalem = nid === '1068575628' || uid === 'emp_1';
+  return isSalem && user.role === 'admin';
+};
+
 export interface SchoolItem {
   id: string;
   nameAr: string;
@@ -276,6 +300,31 @@ export interface SchoolItem {
   district?: string;
   customFields?: Record<string, any>; // الأعمدة والمتغيرات الديناميكية المستوردة من ملف إكسل أو كيس
   [key: string]: any; // تسمح بقراءة أي حقل متغير ديناميكياً
+}
+
+export interface BeneficiaryInquiry {
+  id: string;
+  senderName: string; // اسم صاحب الاستفسار (مطلوب لمتابعة الاستفسار بالاسم)
+  senderPhone?: string;
+  inquiryText: string; // نص الاستفسار
+  createdAt: string; // وقت إرسال الاستفسار من قبل المستفيد
+  status: 'new' | 'claimed' | 'answered'; // حالة الاستفسار (جديد عام | مستلم من مسؤول القبول | تمت الإجابة)
+  
+  // حقول استلام الاستفسار من قبل مسؤول القبول
+  claimedByOfficerId?: string; // معرف مسؤول القبول المستلم
+  claimedByOfficerName?: string; // اسم مسؤول القبول الذي استلم الاستفسار
+  claimedAt?: string; // وقت استلام الاستفسار من قبل مسؤول القبول
+
+  // حقول إجابة مسؤول القبول
+  answeredByOfficerId?: string; // معرف مسؤول القبول
+  answeredByOfficerName?: string; // اسم مسؤول القبول الذي أجاب على الاستفسار
+  officerReply?: string; // نص الإجابة من مسؤول القبول
+  answeredAt?: string; // وقت إجابة مسؤول القبول
+  
+  // تقييم الخدمة من قبل المستفيد في الإجابة
+  beneficiaryRating?: number; // تقييم المستفيد للخدمة (1-5 نجوم)
+  beneficiaryFeedbackNotes?: string; // ملاحظات أو رأي المستفيد في الإجابة
+  ratedAt?: string; // وقت التقييم
 }
 
 export interface BeneficiaryFeedback {

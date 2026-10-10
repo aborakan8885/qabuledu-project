@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { SurveyResponse, OfficerUser } from '../types';
+import { SurveyResponse, OfficerUser, isSystemAdmin } from '../types';
 import { exportRequestsBackupToExcel, filterSurveysByDateAndType, createFullSystemBackupSnapshot, BackupFilterOptions, getProblemTypeArabicLabel } from '../utils/storageEngine';
 import { Download, Calendar, Filter, Database, FileSpreadsheet, ShieldCheck, CheckCircle2, X, AlertCircle, FileText, Layers } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -88,6 +88,10 @@ export default function DateBackupModal({
   if (!isOpen) return null;
 
   const handleExportExcel = () => {
+    if (activeOfficer && !isSystemAdmin(activeOfficer)) {
+      alert('عذراً، أخذ النسخة الاحتياطية مقتصر حصرياً على مدير النظام (الأدمن) أ. سالم محمد الترجمي.');
+      return;
+    }
     const result = exportRequestsBackupToExcel(surveys, currentFilters, officers);
     if (result.success) {
       setExportMessage({
@@ -103,6 +107,10 @@ export default function DateBackupModal({
   };
 
   const handleFullBackupSnapshot = async () => {
+    if (activeOfficer && !isSystemAdmin(activeOfficer)) {
+      alert('عذراً، أخذ النسخة الاحتياطية مقتصر حصرياً على مدير النظام (الأدمن) أ. سالم محمد الترجمي.');
+      return;
+    }
     try {
       const msg = await createFullSystemBackupSnapshot();
       setExportMessage({ text: msg, type: 'success' });

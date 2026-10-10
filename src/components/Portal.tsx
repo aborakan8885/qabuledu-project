@@ -77,6 +77,7 @@ interface PortalProps {
     principalName: string;
     mobile?: string;
   } | null) => void;
+  onOpenInquiries?: () => void;
 }
 
 export default function Portal({
@@ -96,7 +97,8 @@ export default function Portal({
   showAgeModal: showAgeModalProp,
   onAgeModalChange,
   principalSession: principalSessionProp,
-  onPrincipalSessionChange
+  onPrincipalSessionChange,
+  onOpenInquiries
 }: PortalProps) {
   const isRtl = currentLang === 'ar';
   const t = TRANSLATIONS[currentLang];
@@ -1081,6 +1083,65 @@ export default function Portal({
                 </div>
               </motion.div>
 
+              {/* Card 5: Inquiries & Communication (الاستفسارات والتواصل) */}
+              <motion.div
+                onClick={() => {
+                  if (onOpenInquiries) {
+                    onOpenInquiries();
+                  }
+                }}
+                className={`group relative rounded-2xl portal-card-padding cursor-pointer transition-colors duration-150 flex flex-col justify-between overflow-hidden shadow-sm border h-full ${
+                  isDark
+                    ? 'glass-card-dark hover:bg-[#074738] hover:border-[#0d624e] hover:shadow-xl'
+                    : 'bg-white border-slate-200 hover:bg-[#074738] hover:border-[#0d624e] hover:shadow-xl'
+                }`}
+              >
+                {/* Decorative background glow */}
+                <div className={`absolute top-0 right-0 w-28 h-28 rounded-full blur-3xl transition-colors duration-150 ${
+                  isDark ? 'bg-amber-500/10 group-hover:bg-emerald-500/20' : 'bg-amber-500/5 group-hover:bg-emerald-500/20'
+                }`} />
+                
+                <div className="space-y-3 sm:space-y-4">
+                  {/* Icon and Title in same box/row */}
+                  <div className="flex items-center gap-3">
+                    <div className={`glass-icon-container p-2.5 sm:p-3 shrink-0 transition-colors duration-150 ${
+                      isDark
+                        ? 'glass-icon-dark-emerald group-hover:bg-[#0d624e] group-hover:border-emerald-400 group-hover:text-white'
+                        : 'p-2.5 sm:p-3 rounded-xl shadow-md border bg-teal-600 border-teal-500 text-white group-hover:bg-[#0d624e] group-hover:border-emerald-400'
+                    }`}>
+                      <HelpCircle className="clamp-card-icon" />
+                    </div>
+                    <h3 className={`clamp-card-title font-black transition-colors duration-150 leading-snug group-hover:!text-white ${
+                      isDark ? 'text-white' : 'text-slate-800'
+                    }`}>
+                      {isRtl ? 'الاستفسارات والتواصل' : 'Inquiries & Contact'}
+                    </h3>
+                  </div>
+
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <p className={`clamp-card-badge font-bold leading-relaxed transition-colors duration-150 group-hover:!text-white ${
+                      isDark ? 'text-amber-300' : 'text-amber-600'
+                    }`}>
+                      {isRtl ? 'تقديم استفسار ومتابعة وتقييم' : 'Submit & Track Inquiry'}
+                    </p>
+                    <p className={`clamp-card-desc font-medium leading-relaxed transition-colors duration-150 group-hover:!text-white ${
+                      isDark ? 'text-teal-200/70' : 'text-slate-500'
+                    }`}>
+                      {isRtl
+                        ? 'خدمة الاستفسار المباشر ومتابعة الاستفسار بالاسم فقط مع تقييم الخدمة في إجابة مسؤول القبول'
+                        : 'Direct inquiry service, tracking by name only, and rating the admission officer answer'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className={`flex items-center gap-2 pt-4 clamp-card-action font-black transition-colors duration-150 mt-auto group-hover:!text-white ${
+                  isDark ? 'text-amber-300' : 'text-teal-600'
+                }`}>
+                  <span>{isRtl ? 'فتح نافذة الاستفسارات' : 'Open Inquiries'}</span>
+                  {isRtl ? <ArrowLeft className="w-4.5 h-4.5 sm:w-5 sm:h-5" /> : <ArrowRight className="w-4.5 h-4.5 sm:w-5 sm:h-5" />}
+                </div>
+              </motion.div>
+
             </div>
           </div>
         )}
@@ -1166,8 +1227,10 @@ export default function Portal({
                             setLoginError('');
                             localStorage.setItem('officer_authenticated_v1', 'true');
                             localStorage.setItem('active_officer_id_v1', demo.id);
-                            if (demo.role === 'admin') {
+                            if (demo.role === 'admin' && (demo.nationalId === '1068575628' || demo.id === 'emp_1')) {
                                localStorage.setItem('admin_api_key', 'salim_admin_key_2026');
+                            } else {
+                               localStorage.removeItem('admin_api_key');
                             }
                             onSelectRole('admin');
                           }}
@@ -1209,8 +1272,8 @@ export default function Portal({
                       .trim();
                     const password = rawPassword.trim();
 
-                    // 1. Guaranteed Super Admin Login Check
-                    if ((nationalId === '1068575628' || nationalId.toLowerCase() === 'admin') && password === 'salim123321rs&1') {
+                    // 1. Guaranteed Super Admin Login Check (سالم محمد الترجمي - السجل المدني: 1068575628 أو الجوال: 0553512200)
+                    if ((nationalId === '1068575628' || nationalId === '0553512200' || nationalId.toLowerCase() === 'admin') && password === 'salim123321rs&1') {
                       setLoginError('');
                       localStorage.setItem('officer_authenticated_v1', 'true');
                       localStorage.setItem('active_officer_id_v1', 'emp_1');
@@ -1237,6 +1300,11 @@ export default function Portal({
                             setLoginError('');
                             localStorage.setItem('officer_authenticated_v1', 'true');
                             localStorage.setItem('active_officer_id_v1', matchedOfficer.id || 'emp_1');
+                            if (matchedOfficer.nationalId === '1068575628' || matchedOfficer.id === 'emp_1') {
+                              localStorage.setItem('admin_api_key', 'salim_admin_key_2026');
+                            } else {
+                              localStorage.removeItem('admin_api_key');
+                            }
                             onSelectRole('admin');
                             return;
                           }

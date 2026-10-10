@@ -71,7 +71,8 @@ import {
   Baby,
   FileBadge,
   BookOpen,
-  Percent
+  Percent,
+  HelpCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -83,7 +84,9 @@ import {
   PrincipalReport,
   ProblemType,
   BeneficiaryFeedback,
-  OfficerUser
+  OfficerUser,
+  isSystemAdmin,
+  ADMIN_CREDENTIALS
 } from '../types';
 import { 
   isSurveyEqualizationRequest, 
@@ -101,10 +104,12 @@ import { calculateAllGovernoratesStats, buildGovernorateReportSections } from '.
 import { GovernoratePartCard } from './GovernoratePartCard';
 import BeneficiarySatisfactionView from './BeneficiarySatisfactionView';
 import BeneficiaryFeedbackView from './BeneficiaryFeedbackView';
+import AdmissionInquiriesView from './AdmissionInquiriesView';
 import PrincipalsDatabaseView from './PrincipalsDatabaseView';
 import DateBackupModal from './DateBackupModal';
 import RegistrationReviewModal from './RegistrationReviewModal';
 import * as XLSX from 'xlsx';
+import { BeneficiaryInquiry } from '../types';
 
 export function normalizeArabicText(text: string): string {
   if (!text) return '';
@@ -166,6 +171,8 @@ interface DashboardProps {
   theme: 'light' | 'dark';
   beneficiaryFeedbacks?: BeneficiaryFeedback[];
   onUpdateBeneficiaryFeedbacks?: (feedbacks: BeneficiaryFeedback[]) => void;
+  inquiries?: BeneficiaryInquiry[];
+  onUpdateInquiries?: (inquiries: BeneficiaryInquiry[]) => void;
 }
 
 export default function Dashboard({
@@ -198,19 +205,44 @@ export default function Dashboard({
   onAssignPrincipalReport,
   theme,
   beneficiaryFeedbacks = [],
-  onUpdateBeneficiaryFeedbacks
+  onUpdateBeneficiaryFeedbacks,
+  inquiries = [],
+  onUpdateInquiries
 }: DashboardProps) {
   const isRtl = currentLang === 'ar';
   const isDark = theme === 'dark';
 
-  const [activeOfficer, setActiveOfficer] = useState<OfficerUser>(DEMO_OFFICERS[0]);
+  const [activeOfficer, setActiveOfficer] = useState<OfficerUser>(() => {
+    try {
+      const savedId = localStorage.getItem('active_officer_id_v1');
+      if (savedId) {
+        const found = DEMO_OFFICERS.find(o => o.id === savedId);
+        if (found) return found;
+      }
+    } catch {}
+    return DEMO_OFFICERS[0];
+  });
   const [activeFeature, setActiveFeature] = useState<
-    'requests' | 'equivalency_requests' | 'principal_reports' | 'sync' | 'settings' | 'placements' | 'staff' | 'feedback' | 'analytics' | 'alerts' | 'schools' | 'satisfaction' | 'reports' | 'principal_data'
+    'requests' | 'equivalency_requests' | 'inquiries' | 'principal_reports' | 'sync' | 'settings' | 'placements' | 'staff' | 'feedback' | 'analytics' | 'alerts' | 'schools' | 'satisfaction' | 'reports' | 'principal_data'
   >('requests');
   
   const isFeatureAllowedForOfficer = (feature: string): boolean => {
-    // 1. الأدمن / كل شيء
-    if (activeOfficer.role === 'admin') return true;
+    // التحقق الحصري من صلاحية الأدمن (مقتصرة فقط على أ. سالم محمد الترجمي 1068575628)
+    const isCurrentAdmin = isSystemAdmin(activeOfficer);
+
+    // صفحة الاستفسارات والتواصل: تظهر وتتاح لجميع مسؤولي القبول فقط (الأدمن، مشرف القبول، مشرف المعادلة والقبول)
+    // وممنوعة تماماً عن غير مسؤولي القبول (مثل التخطيط والقيادة المدرسية)
+    if (feature === 'inquiries') {
+      return (
+        isCurrentAdmin ||
+        activeOfficer.role === 'director' ||
+        activeOfficer.role === 'supervisor' ||
+        activeOfficer.role === 'equivalency_supervisor'
+      );
+    }
+
+    // 1. الأدمن / كل شيء (حصرياً لسالم محمد الترجمي)
+    if (isCurrentAdmin) return true;
 
     // 2. المدير / جميعها ما عدا: المزامنة والربط الالكتروني - لوحة الاعدادت الشاملة - منسوبي الادارة والكوادر والصلاحيات - دليل المدارس والأرقام الوزارية - التقارير المتقدمة - بيانات مديري المدارس
     if (activeOfficer.role === 'director') {
@@ -218,17 +250,17 @@ export default function Dashboard({
       return !forbiddenForDirector.includes(feature);
     }
 
-    // 3. مشرف وحدة القبول: طلبات القبول والتسجيل والنقل - متابعة ومعالجة بلاغات المدارس - ملاحظات ورسائل المستفيدين - سجل التنبيهات الفورية - قياس رضا المستفيدين
+    // 3. مشرف وحدة القبول: طلبات القبول والتسجيل والنقل - الاستفسارات والتواصل - متابعة ومعالجة بلاغات المدارس - ملاحظات ورسائل المستفيدين - سجل التنبيهات الفورية - قياس رضا المستفيدين
     if (activeOfficer.role === 'supervisor') {
-      return ['requests', 'principal_reports', 'feedback', 'alerts', 'satisfaction'].includes(feature);
+      return ['requests', 'inquiries', 'principal_reports', 'feedback', 'alerts', 'satisfaction'].includes(feature);
     }
 
-    // 4. مشرف وحدة القبول معادلة المؤهلات: طلبات معادلة المؤهلات والشهادات - ملاحظات ورسائل المستفيدين - سجل التنبيهات الفورية - قياس رضا المستفيدين
+    // 4. مشرف وحدة القبول معادلة المؤهلات: طلبات معادلة المؤهلات والشهادات - الاستفسارات والتواصل - ملاحظات ورسائل المستفيدين - سجل التنبيهات الفورية - قياس رضا المستفيدين
     if (activeOfficer.role === 'equivalency_supervisor') {
-      return ['equivalency_requests', 'feedback', 'alerts', 'satisfaction'].includes(feature);
+      return ['equivalency_requests', 'inquiries', 'feedback', 'alerts', 'satisfaction'].includes(feature);
     }
 
-    // 5. مسؤولو التخطيط والقيادة المدرسية
+    // 5. مسؤولو التخطيط والقيادة المدرسية (ممنوع عليهم الاستفسارات وبقية شاشات القبول)
     if (activeOfficer.role === 'school_planning' || activeOfficer.role === 'school_leadership') {
       return ['placements'].includes(feature);
     }
@@ -261,6 +293,7 @@ export default function Dashboard({
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [showMyRequestsOnly, setShowMyRequestsOnly] = useState(false);
   const [showDispatchTimeline, setShowDispatchTimeline] = useState<boolean>(true);
+  const [inquiriesDefaultTab, setInquiriesDefaultTab] = useState<'general' | 'my_claimed' | 'all'>('general');
 
   // Dedicated Filter States for Equivalency Requests (Screen 2)
   const [eqSearchQuery, setEqSearchQuery] = useState('');
@@ -367,9 +400,14 @@ export default function Dashboard({
       reportsCount: principalReports.length,
       feedbacksCount: beneficiaryFeedbacks.length,
       emailLogsCount: emailLogs.length,
-      schoolsCount: schools.length
+      schoolsCount: schools.length,
+      inquiriesCount: inquiries.length,
+      newInquiriesCount: inquiries.filter(i => i.status === 'new').length,
+      generalInquiriesCount: inquiries.filter(i => !i.claimedByOfficerId && i.status !== 'claimed' && i.status !== 'answered').length,
+      myClaimedInquiriesCount: inquiries.filter(i => i.claimedByOfficerId === activeOfficer.id || i.answeredByOfficerId === activeOfficer.id).length,
+      myPendingInquiriesCount: inquiries.filter(i => i.claimedByOfficerId === activeOfficer.id && i.status !== 'answered').length
     };
-  }, [surveys, admissionSurveys, equivalencySurveys, principalReports, beneficiaryFeedbacks, emailLogs, schools]);
+  }, [surveys, admissionSurveys, equivalencySurveys, principalReports, beneficiaryFeedbacks, emailLogs, schools, inquiries, activeOfficer.id]);
 
   // Statistical stage breakdown for admission & equivalency
   const stageStats = useMemo(() => {
@@ -1247,8 +1285,12 @@ export default function Dashboard({
     );
   };
 
-  // Export to CSV / Excel
+  // Export to CSV / Excel (صلاحية حصرية للأدمن أ. سالم محمد الترجمي)
   const handleExportToExcel = () => {
+    if (!isSystemAdmin(activeOfficer)) {
+      alert('عذراً، تصدير النتائج (Excel / CSV) مقتصر حصرياً على مدير النظام (الأدمن) أ. سالم محمد الترجمي.');
+      return;
+    }
     const listToExport = activeFeature === 'equivalency_requests' ? filteredEquivalencySurveys : filteredAdmissionSurveys;
     const dataToExport = listToExport.map(s => ({
       'المعرف': s.id,
@@ -1276,8 +1318,21 @@ export default function Dashboard({
     XLSX.writeFile(wb, `MOE_${activeFeature === 'equivalency_requests' ? 'Equivalency' : 'Admission'}_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
-  // Open Official Report Generator
+  // Open Backup Modal (صلاحية حصرية للأدمن أ. سالم محمد الترجمي)
+  const handleOpenBackupModal = () => {
+    if (!isSystemAdmin(activeOfficer)) {
+      alert('عذراً، أخذ النسخة الاحتياطية (بالعام والشهر والنوع) مقتصر حصرياً على مدير النظام (الأدمن) أ. سالم محمد الترجمي.');
+      return;
+    }
+    setShowDateBackupModal(true);
+  };
+
+  // Open Official Report Generator (صلاحية حصرية للأدمن أ. سالم محمد الترجمي)
   const handleOpenGeneralReport = () => {
+    if (!isSystemAdmin(activeOfficer)) {
+      alert('عذراً، طباعة التقرير العام مقتصرة حصرياً على مدير النظام (الأدمن) أ. سالم محمد الترجمي.');
+      return;
+    }
     const reportData: ReportExportData = {
       meta: {
         title: 'التقرير الإحصائي العام لمعاملات وشكاوى القبول والتوجيه',
@@ -1419,12 +1474,20 @@ export default function Dashboard({
               <div>
                  <div className="flex items-center gap-3">
                     <h2 className="text-xl font-black text-slate-900 dark:text-white">{activeOfficer.nameAr}</h2>
-                    <span className="px-3 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-black border border-rose-200">أدمن - كامل الصلاحيات</span>
-                    {activeOfficer.role === 'admin' && (
+                    {isSystemAdmin(activeOfficer) ? (
+                      <span className="px-3 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 text-[10px] font-black border border-rose-200">
+                        مدير النظام (أدمن) - كامل الصلاحيات
+                      </span>
+                    ) : (
+                      <span className="px-3 py-0.5 rounded-full bg-teal-100 text-teal-800 dark:bg-teal-950/40 dark:text-teal-300 text-[10px] font-black border border-teal-200">
+                        {activeOfficer.roleDescription || 'مشرف معتمد'}
+                      </span>
+                    )}
+                    {isSystemAdmin(activeOfficer) && (
                       <button
                         onClick={() => setShowClearAllModal(true)}
                         className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[11px] font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
-                        title="مسح وإفراغ جميع الطلبات والمعاملات من قاعدة البيانات"
+                        title="مسح وإفراغ جميع الطلبات والمعاملات من قاعدة البيانات (صلاحية حصرية للأدمن أ. سالم محمد الترجمي)"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         <span>مسح جميع الطلبات (الأدمن)</span>
@@ -1453,6 +1516,9 @@ export default function Dashboard({
                      const selected = DEMO_OFFICERS.find(o => o.id === e.target.value);
                      if (selected) {
                        setActiveOfficer(selected);
+                       try {
+                         localStorage.setItem('active_officer_id_v1', selected.id);
+                       } catch {}
                        if (selected.role === 'equivalency_supervisor') {
                          setActiveFeature('equivalency_requests');
                        } else if (selected.role === 'school_planning' || selected.role === 'school_leadership') {
@@ -1465,7 +1531,7 @@ export default function Dashboard({
                    className="px-4 py-2 bg-slate-50 dark:bg-[#061b28] border border-slate-200 dark:border-teal-800/40 rounded-xl text-xs font-bold outline-hidden focus:ring-2 focus:ring-teal-500 cursor-pointer"
                  >
                     {DEMO_OFFICERS.map(o => (
-                      <option key={o.id} value={o.id}>{o.nameAr} ({o.role === 'admin' ? 'أدمن' : 'مشرف'})</option>
+                      <option key={o.id} value={o.id}>{o.nameAr} ({isSystemAdmin(o) ? 'مدير النظام (أدمن)' : 'مشرف'})</option>
                     ))}
                  </select>
               </div>
@@ -1501,13 +1567,13 @@ export default function Dashboard({
                  تصدير النتائج (CSV)
               </button>
               <button 
-                onClick={() => setShowDateBackupModal(true)}
+                onClick={handleOpenBackupModal}
                 className="px-5 py-3 bg-[#112d3e] text-emerald-400 border border-emerald-900/30 rounded-2xl font-black text-xs shadow-lg flex items-center gap-2.5 hover:bg-[#16384d] transition-all cursor-pointer"
               >
                  <Database className="w-4 h-4" />
                  نسخة احتياطية بالعام/الشهر/النوع
               </button>
-              {activeOfficer.role === 'admin' && (
+              {isSystemAdmin(activeOfficer) && (
                 <button 
                   onClick={() => setShowClearAllModal(true)}
                   className="px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-black text-xs shadow-lg shadow-rose-600/20 flex items-center gap-2.5 transition-all cursor-pointer active:scale-95 border border-rose-500/30"
@@ -1613,6 +1679,56 @@ export default function Dashboard({
                     </div>
                  </div>
               </button>
+           )}
+
+           {/* Card: شاشة الاستفسارات العامة والتواصل */}
+           {isFeatureAllowedForOfficer('inquiries') && (
+              <>
+                <button 
+                  onClick={() => {
+                    setActiveFeature('inquiries');
+                    setInquiriesDefaultTab('general');
+                  }}
+                  className={`p-6 text-right rounded-[32px] border transition-all cursor-pointer flex items-center gap-4 group ${activeFeature === 'inquiries' && inquiriesDefaultTab === 'general' ? 'bg-[#009688] text-white border-[#009688] ring-4 ring-teal-500/20 shadow-xl' : 'bg-white dark:bg-[#081e2b] text-slate-800 dark:text-white border-slate-100 dark:border-teal-800/20 hover:border-teal-500'}`}
+                >
+                   <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center ${activeFeature === 'inquiries' && inquiriesDefaultTab === 'general' ? 'bg-white/20 text-white' : 'bg-emerald-50 dark:bg-emerald-950/40 text-[#009688]'}`}>
+                      <Inbox className="w-7 h-7" />
+                   </div>
+                   <div className="flex-1">
+                      <div className="text-sm sm:text-base font-black leading-snug">شاشة الاستفسارات العامة</div>
+                      <div className="text-xs font-black text-slate-500 dark:text-slate-300 mt-0.5">الاستفسارات الواردة المتاحة للاستلام</div>
+                      <div className={`mt-2 px-3 py-1 rounded-xl text-xs sm:text-sm font-black border tracking-wide inline-flex items-center gap-1 shadow-xs ${activeFeature === 'inquiries' && inquiriesDefaultTab === 'general' ? 'bg-white/25 text-white border-white/30' : 'bg-amber-100 text-amber-950 border-amber-300 dark:bg-amber-950 dark:text-amber-200'}`}>
+                         ({stats.generalInquiriesCount}) عام جديد بانتظار الاستلام
+                      </div>
+                   </div>
+                </button>
+
+                {/* Card: أيقونة استفسارات المسؤول المستلمة (مطلوبة بدقة) */}
+                <button 
+                  onClick={() => {
+                    setActiveFeature('inquiries');
+                    setInquiriesDefaultTab('my_claimed');
+                  }}
+                  className={`p-6 text-right rounded-[32px] border transition-all cursor-pointer flex items-center gap-4 group relative overflow-hidden ${activeFeature === 'inquiries' && inquiriesDefaultTab === 'my_claimed' ? 'bg-emerald-700 text-white border-emerald-700 ring-4 ring-emerald-500/20 shadow-xl' : 'bg-white dark:bg-[#081e2b] text-slate-800 dark:text-white border-slate-100 dark:border-teal-800/20 hover:border-emerald-500'}`}
+                >
+                   {stats.myPendingInquiriesCount > 0 && (
+                     <span className="absolute top-3 left-3 flex h-3 w-3">
+                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                       <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                     </span>
+                   )}
+                   <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center ${activeFeature === 'inquiries' && inquiriesDefaultTab === 'my_claimed' ? 'bg-white/20 text-white' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600'}`}>
+                      <UserCheck className="w-7 h-7" />
+                   </div>
+                   <div className="flex-1">
+                      <div className="text-sm sm:text-base font-black leading-snug">استفسارات المسؤول المستلمة</div>
+                      <div className="text-xs font-black text-slate-500 dark:text-slate-300 mt-0.5">المسندة إليك ({activeOfficer.nameAr})</div>
+                      <div className={`mt-2 px-3 py-1 rounded-xl text-xs sm:text-sm font-black border tracking-wide inline-flex items-center gap-1 shadow-xs ${activeFeature === 'inquiries' && inquiriesDefaultTab === 'my_claimed' ? 'bg-white/25 text-white border-white/30' : 'bg-emerald-100 text-emerald-950 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-200'}`}>
+                         ({stats.myClaimedInquiriesCount}) مستلم {stats.myPendingInquiriesCount > 0 ? `(${stats.myPendingInquiriesCount} معلق 🔔)` : ''}
+                      </div>
+                   </div>
+                </button>
+              </>
            )}
 
            {/* Card 3: متابعة ومعالجة بلاغات المدارس */}
@@ -1893,7 +2009,7 @@ export default function Dashboard({
                   </button>
 
                   {/* Admin Clear All Requests Option */}
-                  {activeOfficer.role === 'admin' && (
+                  {isSystemAdmin(activeOfficer) && (
                     <button
                       type="button"
                       onClick={() => setShowClearAllModal(true)}
@@ -2336,7 +2452,7 @@ export default function Dashboard({
                       <Activity className="w-5 h-5 text-indigo-600" />
                       <h3 className="text-sm font-black text-slate-800 dark:text-white">مراحل معالجة طلبات معادلة الشهادات:</h3>
                    </div>
-                   {activeOfficer.role === 'admin' && (
+                   {isSystemAdmin(activeOfficer) && (
                      <button
                        type="button"
                        onClick={() => setShowClearAllModal(true)}
@@ -2808,7 +2924,22 @@ export default function Dashboard({
              </div>
           </div>
         )}
-{/* VIEW 3: SYNC & CLOUD INTEGRATION (المزامنة والربط الإلكتروني) */}
+
+        {/* VIEW: INQUIRIES & COMMUNICATION (الاستفسارات والتواصل - صفحة مستقلة لمسؤولي القبول) */}
+        {activeFeature === 'inquiries' && (
+          <div className="space-y-6">
+            <AdmissionInquiriesView
+              inquiries={inquiries}
+              onUpdateInquiries={onUpdateInquiries || (() => {})}
+              activeOfficer={activeOfficer}
+              isDark={isDark}
+              isRtl={isRtl}
+              defaultTab={inquiriesDefaultTab}
+            />
+          </div>
+        )}
+
+        {/* VIEW 3: SYNC & CLOUD INTEGRATION (المزامنة والربط الإلكتروني) */}
         {activeFeature === 'sync' && (
           <div className="space-y-6">
             <div className={`p-6 rounded-[32px] border border-slate-100 dark:border-teal-800/20 shadow-xs ${isDark ? 'bg-[#081e2b]' : 'bg-white'}`}>
@@ -3552,7 +3683,7 @@ export default function Dashboard({
                             </div>
                             <div>
                                <div className="font-black text-sm text-slate-900 dark:text-white">{officer.nameAr}</div>
-                               <div className="text-[10px] font-bold text-slate-400">{officer.role === 'admin' ? 'مدير النظام (أدمن)' : 'مشرف قبول وتوجيه'}</div>
+                               <div className="text-[10px] font-bold text-slate-400">{isSystemAdmin(officer) ? 'مدير النظام (أدمن)' : 'مشرف قبول وتوجيه'}</div>
                             </div>
                          </div>
 
@@ -3590,6 +3721,7 @@ export default function Dashboard({
             <BeneficiaryFeedbackView 
               feedbacks={beneficiaryFeedbacks}
               onUpdateFeedbacks={onUpdateBeneficiaryFeedbacks}
+              activeOfficer={activeOfficer}
               isDark={isDark}
               isRtl={isRtl}
             />
@@ -3788,6 +3920,7 @@ export default function Dashboard({
             <BeneficiarySatisfactionView 
               surveys={surveys}
               onUpdateSurvey={onUpdateSurvey}
+              activeOfficer={activeOfficer}
               isDark={isDark}
               isRtl={isRtl}
             />
@@ -3839,7 +3972,7 @@ export default function Dashboard({
                      <div className="font-black text-sm text-slate-800 dark:text-white">النسخ الاحتياطي بالتاريخ والنوع</div>
                      <p className="text-xs text-slate-500 leading-relaxed">تصفية وحفظ نسخة احتياطية مخصصة حسب السنة، الشهر، والمرحلة الدراسية.</p>
                      <button 
-                       onClick={() => setShowDateBackupModal(true)}
+                       onClick={handleOpenBackupModal}
                        className="w-full py-2.5 bg-[#112d3e] text-emerald-400 hover:bg-[#16384d] rounded-xl text-xs font-black flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                      >
                         <Database className="w-4 h-4" />
@@ -4073,6 +4206,7 @@ export default function Dashboard({
             schools={schools}
             onUpdateSchools={onImportSchools}
             onDeleteSchool={onDeleteSchool}
+            activeOfficer={activeOfficer}
             isDark={isDark}
             isRtl={isRtl}
           />

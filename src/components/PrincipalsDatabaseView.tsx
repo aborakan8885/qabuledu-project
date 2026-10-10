@@ -27,7 +27,7 @@ import {
   CheckCircle
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { SchoolItem } from '../types';
+import { SchoolItem, isSystemAdmin, OfficerUser } from '../types';
 import { 
   extractCivilIdFromSchool, 
   cleanDigitsString, 
@@ -43,6 +43,7 @@ interface PrincipalsDatabaseViewProps {
   schools: SchoolItem[];
   onUpdateSchools: (schools: SchoolItem[]) => void;
   onDeleteSchool?: (id: string) => void;
+  activeOfficer?: OfficerUser;
   isDark?: boolean;
   isRtl?: boolean;
 }
@@ -51,6 +52,7 @@ export const PrincipalsDatabaseView: React.FC<PrincipalsDatabaseViewProps> = ({
   schools,
   onUpdateSchools,
   onDeleteSchool,
+  activeOfficer,
   isDark = false,
   isRtl = true
 }) => {
@@ -443,6 +445,10 @@ export const PrincipalsDatabaseView: React.FC<PrincipalsDatabaseViewProps> = ({
 
   // Download Sample Excel Template
   const handleDownloadTemplate = () => {
+    if (activeOfficer && !isSystemAdmin(activeOfficer)) {
+      alert('عذراً، تحميل القوالب مقتصر حصرياً على مدير النظام (الأدمن) أ. سالم محمد الترجمي.');
+      return;
+    }
     const templateData = [
       {
         'السجل المدني': '1052889670',
@@ -508,6 +514,10 @@ export const PrincipalsDatabaseView: React.FC<PrincipalsDatabaseViewProps> = ({
 
   // Export Current Principals & Schools Data to Excel
   const handleExportCurrentData = () => {
+    if (activeOfficer && !isSystemAdmin(activeOfficer)) {
+      alert('عذراً، تصدير النتائج مقتصر حصرياً على مدير النظام (الأدمن) أ. سالم محمد الترجمي.');
+      return;
+    }
     if (enrichedSchools.length === 0) {
       showToast('لا توجد بيانات مدارس لتصديرها', 'error');
       return;

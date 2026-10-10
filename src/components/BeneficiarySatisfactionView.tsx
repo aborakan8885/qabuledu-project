@@ -25,13 +25,14 @@ import {
   FileText
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { SurveyResponse, ProblemType } from '../types';
+import { SurveyResponse, ProblemType, isSystemAdmin, OfficerUser } from '../types';
 import { OfficialReportModal } from './OfficialReportModal';
 import { ReportExportData } from '../utils/reportExporter';
 
 interface BeneficiarySatisfactionViewProps {
   surveys: SurveyResponse[];
   onUpdateSurvey?: (survey: SurveyResponse) => void;
+  activeOfficer?: OfficerUser;
   isDark?: boolean;
   isRtl?: boolean;
 }
@@ -39,6 +40,7 @@ interface BeneficiarySatisfactionViewProps {
 export default function BeneficiarySatisfactionView({
   surveys,
   onUpdateSurvey,
+  activeOfficer,
   isDark = false,
   isRtl = true
 }: BeneficiarySatisfactionViewProps) {
@@ -289,6 +291,10 @@ export default function BeneficiarySatisfactionView({
 
   // Open Official Admissions Unit Satisfaction Report Modal (PDF / Word / Excel / ZIP)
   const handleOpenSatisfactionOfficialReport = () => {
+    if (activeOfficer && !isSystemAdmin(activeOfficer)) {
+      alert('عذراً، طباعة التقرير العام مقتصرة حصرياً على مدير النظام (الأدمن) أ. سالم محمد الترجمي.');
+      return;
+    }
     const reportData: ReportExportData = {
       meta: {
         title: isRtl ? 'تقرير قياس رضا المستفيدين وجودة خدمات القبول' : 'Beneficiary Satisfaction & Quality Report',
@@ -346,6 +352,10 @@ export default function BeneficiarySatisfactionView({
 
   // Export to Excel with complete RTL support
   const handleExportExcel = () => {
+    if (activeOfficer && !isSystemAdmin(activeOfficer)) {
+      alert('عذراً، تصدير النتائج مقتصر حصرياً على مدير النظام (الأدمن) أ. سالم محمد الترجمي.');
+      return;
+    }
     const dataRows = filteredSurveys.map((s, idx) => {
       const staffVal = Number(s.staffSatisfaction) || 5;
       const recepVal = Number(s.receptionSatisfaction) || 5;
