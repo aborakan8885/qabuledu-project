@@ -1552,27 +1552,31 @@ export default function Dashboard({
               <p className="text-slate-500 dark:text-teal-400/70 font-bold mt-1 text-sm">عرض حي لأداء الكوادر، شكاوى المستفيدين، والإخطارات المشفرة</p>
            </div>
            <div className="flex flex-wrap gap-3">
-              <button 
-                onClick={handleOpenGeneralReport}
-                className="px-5 py-3 bg-emerald-600 text-white rounded-2xl font-black text-xs shadow-lg shadow-emerald-500/20 flex items-center gap-2.5 hover:bg-emerald-700 transition-all cursor-pointer"
-              >
-                 <Printer className="w-4 h-4" />
-                 طباعة التقرير العام
-              </button>
-              <button 
-                onClick={handleExportToExcel}
-                className="px-5 py-3 bg-blue-600 text-white rounded-2xl font-black text-xs shadow-lg shadow-blue-500/20 flex items-center gap-2.5 hover:bg-blue-700 transition-all cursor-pointer"
-              >
-                 <Download className="w-4 h-4" />
-                 تصدير النتائج (CSV)
-              </button>
-              <button 
-                onClick={handleOpenBackupModal}
-                className="px-5 py-3 bg-[#112d3e] text-emerald-400 border border-emerald-900/30 rounded-2xl font-black text-xs shadow-lg flex items-center gap-2.5 hover:bg-[#16384d] transition-all cursor-pointer"
-              >
-                 <Database className="w-4 h-4" />
-                 نسخة احتياطية بالعام/الشهر/النوع
-              </button>
+              {isSystemAdmin(activeOfficer) && (
+                 <>
+                    <button 
+                      onClick={handleOpenGeneralReport}
+                      className="px-5 py-3 bg-emerald-600 text-white rounded-2xl font-black text-xs shadow-lg shadow-emerald-500/20 flex items-center gap-2.5 hover:bg-emerald-700 transition-all cursor-pointer"
+                    >
+                       <Printer className="w-4 h-4" />
+                       طباعة التقرير العام
+                    </button>
+                    <button 
+                      onClick={handleExportToExcel}
+                      className="px-5 py-3 bg-blue-600 text-white rounded-2xl font-black text-xs shadow-lg shadow-blue-500/20 flex items-center gap-2.5 hover:bg-blue-700 transition-all cursor-pointer"
+                    >
+                       <Download className="w-4 h-4" />
+                       تصدير النتائج (CSV)
+                    </button>
+                    <button 
+                      onClick={handleOpenBackupModal}
+                      className="px-5 py-3 bg-[#112d3e] text-emerald-400 border border-emerald-900/30 rounded-2xl font-black text-xs shadow-lg flex items-center gap-2.5 hover:bg-[#16384d] transition-all cursor-pointer"
+                    >
+                       <Database className="w-4 h-4" />
+                       نسخة احتياطية بالعام/الشهر/النوع
+                    </button>
+                 </>
+              )}
               {isSystemAdmin(activeOfficer) && (
                 <button 
                   onClick={() => setShowClearAllModal(true)}
