@@ -52,14 +52,8 @@ export default function App() {
     return (cached === 'dark' || cached === 'light') ? cached : 'light';
   });
 
-  // Site Gate Security: Passcode Protection (10685756280)
-  const [isSiteUnlocked, setIsSiteUnlocked] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return (
-      sessionStorage.getItem('site_access_granted_v1') === 'true' ||
-      localStorage.getItem('site_access_granted_v1') === 'true'
-    );
-  });
+  // Site Gate Passcode Protection Disabled as requested
+  const [isSiteUnlocked, setIsSiteUnlocked] = useState<boolean>(true);
 
   const handleLockSite = () => {
     try {
