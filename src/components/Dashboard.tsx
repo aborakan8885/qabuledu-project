@@ -1881,10 +1881,10 @@ export default function Dashboard({
     const newSchools = schoolParsedData.rows;
     if (schoolImportMode === 'replace') {
       onImportSchools(newSchools, true);
-      setClaimToastMessage();
+      setClaimToastMessage('✅ تم استيراد وتحديث بيانات المدارس بنجاح');
     } else {
       onImportSchools(newSchools, false);
-      setClaimToastMessage();
+      setClaimToastMessage('✅ تم إضافة المدارس بنجاح');
     }
     setShowSchoolImportModal(false);
     setSchoolParsedData(null);
@@ -1919,8 +1919,8 @@ export default function Dashboard({
     const wb = XLSX.utils.book_new();
     wb.Workbook = { Views: [{ RTL: true }] };
     XLSX.utils.book_append_sheet(wb, ws, 'دليل المدارس');
-    XLSX.writeFile(wb, );
-    setClaimToastMessage();
+    XLSX.writeFile(wb, 'دليل_مدارس_المدينة_المنورة.xlsx');
+    setClaimToastMessage('📥 تم تصدير دليل المدارس بنجاح');
   };
 
   const handleAddSchool = (e: React.FormEvent) => {

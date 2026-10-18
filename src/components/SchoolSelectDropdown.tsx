@@ -17,6 +17,8 @@ interface SchoolSelectDropdownProps {
   id?: string;
   label?: string;
   helperText?: string;
+  name?: string;
+  autoComplete?: string;
 }
 
 export const SchoolSelectDropdown: React.FC<SchoolSelectDropdownProps> = ({
@@ -30,7 +32,9 @@ export const SchoolSelectDropdown: React.FC<SchoolSelectDropdownProps> = ({
   error,
   id = 'school-search-select',
   label,
-  helperText
+  helperText,
+  name,
+  autoComplete
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState(value || '');
@@ -104,6 +108,8 @@ export const SchoolSelectDropdown: React.FC<SchoolSelectDropdownProps> = ({
 
         <input
           type="text"
+          name={name}
+          autoComplete={autoComplete}
           value={searchQuery}
           onChange={handleInputChange}
           onFocus={() => setIsOpen(true)}

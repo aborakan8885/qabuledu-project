@@ -264,7 +264,10 @@ export interface OfficerUser {
   mustChangePassword?: boolean; // هل يجب تعيين كلمة مرور جديدة وتأكيدها عند أول دخول
   fullNameQuad?: string; // الاسم الرباعي للمستخدم
   tasks?: string; // المهام
+  taskText?: string;
+  unit?: string;
   permissions?: UserPermissions; // الصلاحيات
+  [key: string]: any;
 }
 
 export interface UserPermissions {

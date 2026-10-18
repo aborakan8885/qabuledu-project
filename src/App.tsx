@@ -18,6 +18,14 @@ import {
   submitSurveyRealtime, 
   updateSurveyRealtime 
 } from './utils/realtimeEngine';
+import {
+  getPersistedOfficerSession,
+  persistOfficerSession,
+  clearOfficerSession,
+  getPersistedPrincipalSession,
+  persistPrincipalSession,
+  initSessionKeepAlive
+} from './utils/browserCredentialManager';
 import { Language, SurveyResponse, AppConfig, EmailLog, SystemIntegrationLog, PrincipalReport, SchoolItem, BeneficiaryFeedback, BeneficiaryInquiry } from './types';
 import { sendOfficialEmail } from './utils/emailService';
 import { getSafeTranslation } from './utils/translationHelper';
@@ -75,22 +83,54 @@ export default function App() {
   }, [theme]);
 
   // Application views / tabs / roles: 'portal' (Unified Selection Portal), 'parent' (Beneficiary / Parent Survey Form), or 'admin' (Admission Officer / System Admin)
+  // Maintains login session across inactivity, page reload, and browser restarts
   const [userRole, setUserRoleState] = useState<'portal' | 'parent' | 'admin'>(() => {
-    if (typeof window !== 'undefined' && window.location.search.includes('print-report=true')) {
-      return 'admin';
+    if (typeof window !== 'undefined') {
+      if (window.location.search.includes('print-report=true')) {
+        return 'admin';
+      }
+      const officerSess = getPersistedOfficerSession();
+      if (officerSess.isAuthenticated) {
+        return 'admin';
+      }
     }
     return 'portal';
   });
 
   // Portal view state & Modal state
-  const [portalView, setPortalViewState] = useState<'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard' | 'admin-login'>('selection');
+  const [portalView, setPortalViewState] = useState<'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard' | 'admin-login'>(() => {
+    if (typeof window !== 'undefined') {
+      const persistedPrincipal = getPersistedPrincipalSession();
+      if (persistedPrincipal) {
+        return 'principal-dashboard';
+      }
+      const savedView = localStorage.getItem('portal_view_v1');
+      if (savedView === 'parent-choices' || savedView === 'parent-track') {
+        return savedView;
+      }
+    }
+    return 'selection';
+  });
+
   const [showAgeModal, setShowAgeModalState] = useState<boolean>(false);
+
+  // Principal session maintained permanently across inactivity
   const [principalSession, setPrincipalSession] = useState<{
     schoolCode: string;
     schoolName: string;
     principalName: string;
     mobile?: string;
-  } | null>(null);
+  } | null>(() => {
+    return getPersistedPrincipalSession();
+  });
+
+  // Session Activity Keep-Alive: keeps user continuously logged in during inactivity
+  useEffect(() => {
+    const cleanupKeepAlive = initSessionKeepAlive();
+    return () => {
+      cleanupKeepAlive();
+    };
+  }, []);
 
   // Navigation History Stack
   type NavState = {
@@ -121,8 +161,37 @@ export default function App() {
     }
   };
 
-  const setUserRole = (role: 'portal' | 'parent' | 'admin') => {
+  const setUserRole = (role: 'portal' | 'parent' | 'admin', officerId?: string) => {
+    if (role === 'admin') {
+      const activeId = officerId || (typeof window !== 'undefined' ? localStorage.getItem('active_officer_id_v1') : null) || 'emp_1';
+      persistOfficerSession(activeId);
+    }
     pushNavState(role, role === 'portal' ? 'selection' : portalView, false);
+  };
+
+  const handlePrincipalSessionChange = (session: { schoolCode: string; schoolName: string; principalName: string; mobile?: string } | null) => {
+    setPrincipalSession(session);
+    persistPrincipalSession(session);
+    if (!session && portalView === 'principal-dashboard') {
+      setPortalViewState('selection');
+    }
+  };
+
+  // Explicit Officer Logout (only logged out when user explicitly clicks logout)
+  const handleAdminLogout = () => {
+    clearOfficerSession();
+    historyStackRef.current = [];
+    setUserRoleState('portal');
+    setPortalViewState('selection');
+    setAlertToast({ message: 'تم تسجيل الخروج بنجاح. أهلاً بك دائماً!', type: 'info' });
+  };
+
+  // Explicit School Principal Logout
+  const handlePrincipalLogout = () => {
+    persistPrincipalSession(null);
+    setPrincipalSession(null);
+    setPortalViewState('selection');
+    setAlertToast({ message: 'تم تسجيل خروج حساب المدرسة بنجاح.', type: 'info' });
   };
 
   const handlePortalViewChange = (newView: 'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard' | 'admin-login') => {
@@ -747,6 +816,8 @@ export default function App() {
         canGoBack={historyStackRef.current.length > 0}
         theme={theme}
         onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+        onLogout={handleAdminLogout}
+        onPrincipalLogout={handlePrincipalLogout}
         principalSession={principalSession}
       />
 
@@ -779,7 +850,7 @@ export default function App() {
                   showAgeModal={showAgeModal}
                   onAgeModalChange={handleAgeModalChange}
                   principalSession={principalSession}
-                  onPrincipalSessionChange={setPrincipalSession}
+                  onPrincipalSessionChange={handlePrincipalSessionChange}
                   onOpenInquiries={() => setIsInquiriesModalOpen(true)}
                 />
               </ErrorBoundary>

@@ -43,7 +43,7 @@ export default function OfficerEditModal({ officer, onClose, onUpdate, isDark }:
                 <input 
                    type="text" 
                    value={formData.role} 
-                   onChange={e => setFormData({...formData, role: e.target.value})}
+                   onChange={e => setFormData({...formData, role: e.target.value as any})}
                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-teal-800/40 rounded-xl text-sm"
                 />
              </div>
