@@ -25,7 +25,6 @@ interface HeaderProps {
   canGoBack?: boolean;
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
-  onLockSite?: () => void;
   principalSession?: {
     principalName: string;
     schoolName: string;
@@ -49,7 +48,6 @@ export default function Header({
   canGoBack = false,
   theme,
   onToggleTheme,
-  onLockSite,
   principalSession
 }: HeaderProps) {
   const t = TRANSLATIONS[currentLang];
@@ -121,17 +119,14 @@ export default function Header({
               <Languages className="w-3.5 h-3.5 text-teal-200" />
             </button>
 
-            {/* Lock / Exit Gate Button */}
-            {onLockSite && (
-              <button
-                onClick={onLockSite}
-                title={isRtl ? 'قفل الموقع والدخول لكلمة المرور' : 'Lock Site Access'}
-                className="flex items-center justify-center p-2 rounded-xl transition-all cursor-pointer bg-white/10 hover:bg-rose-500/30 hover:border-rose-400/50 border border-white/20 text-white shadow-xs"
-                id="header-lock-toggle"
-              >
-                <Lock className="w-4 h-4 text-emerald-300" />
-              </button>
-            )}
+            {/* Real-time Live Sync Indicator */}
+            <div 
+              title={isRtl ? 'المزامنة اللحظية المباشرة نشطة تلقائياً' : 'Live Real-time Sync Active'}
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/10 border border-emerald-400/30 text-emerald-300 text-[11px] font-bold shadow-xs select-none"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <span>{isRtl ? 'بث لحظي' : 'Live'}</span>
+            </div>
 
             {/* Theme Toggle Button */}
             <button

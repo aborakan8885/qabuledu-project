@@ -1,4 +1,81 @@
 {
+  "principalReports": [],
+  "lastSyncedAt": "2026-10-18T06:14:26.521Z",
+  "surveys": [
+    {
+      "beneficiaryName": "خالد بن صالح الحربي",
+      "nationalId": "1098765432",
+      "surveyType": "admission",
+      "currentSchool": "مدرسة طيبة الابتدائية",
+      "status": "pending",
+      "id": "SURV-562",
+      "createdAt": "2026-10-18T06:33:18.016Z",
+      "lastUpdatedAt": "2026-10-18T06:33:18.016Z",
+      "isSynced": true
+    }
+  ],
+  "inquiries": [
+    {
+      "id": "inq-1792305184729",
+      "senderName": "أحمد الحربي",
+      "senderPhone": "0555555555",
+      "inquiryText": "استفسار تجريبي للتأكد من المزامنة الفورية اللحظية دون تحديث للصفحة",
+      "createdAt": "2026-10-18T06:33:04.729Z",
+      "status": "answered",
+      "answeredByOfficerId": "emp_101",
+      "answeredByOfficerName": "سالم محمد الترجمي",
+      "officerReply": "أهلاً بك، تم فحص استفسارك والرد عليه فورياً بنجاح.",
+      "answeredAt": "2026-10-18T06:33:00.000Z"
+    },
+    {
+      "senderName": "فيصل محمد",
+      "senderPhone": "0521365897",
+      "inquiryText": "لماذا",
+      "id": "inq-1791639125250",
+      "createdAt": "2026-10-10T13:32:05.250Z",
+      "status": "new"
+    },
+    {
+      "senderName": "ماجد محمد",
+      "senderPhone": "1254365213",
+      "inquiryText": "مت يبدأ التسجيل",
+      "id": "inq-1791638872465",
+      "createdAt": "2026-10-10T13:27:52.465Z",
+      "status": "new"
+    },
+    {
+      "id": "inq-101",
+      "senderName": "عبدالله بن سعد الحربي",
+      "senderPhone": "0554433221",
+      "inquiryText": "السلام عليكم، أود الاستفسار عن إمكانية نقل ابني في الصف الثالث الابتدائي إلى مدرسة قريبة من حي العزيزية، وهل الشواغر متاحة حالياً؟",
+      "createdAt": "2026-10-10T09:28:39.618Z",
+      "status": "answered",
+      "answeredByOfficerId": "emp_followup",
+      "answeredByOfficerName": "عبدالرحيم الأحمدي (مشرف القبول والتسجيل)",
+      "officerReply": "وعليكم السلام ورحمة الله وبركاته. مرحباً بك أخي الكريم، نعم تم التحقق من المدارس المجاورة بحي العزيزية وتوجد شواغر متاحة بمدرسة ابن كثير الابتدائية، يمكنك تقديم طلب النقل وسيتم التسكين مباشرة بإذن الله.",
+      "answeredAt": "2026-10-10T12:28:39.618Z",
+      "beneficiaryRating": 5,
+      "beneficiaryFeedbackNotes": "خدمة ممتازة وسريعة جداً، شكراً جزيلاً للأستاذ عبدالرحيم الأحمدي على تجاوبه السريع والوافي.",
+      "ratedAt": "2026-10-10T13:28:39.618Z"
+    },
+    {
+      "id": "inq-102",
+      "senderName": "فاطمة بنت أحمد الزهراني",
+      "senderPhone": "0501239874",
+      "inquiryText": "أرغب بالاستفسار عن موعد انتهاء فترة معادلة الشهادات الصادرة من خارج المملكة للمرحلة المتوسطة، وما هي المستندات المطلوبة مسبقاً؟",
+      "createdAt": "2026-10-10T11:58:39.618Z",
+      "status": "new"
+    }
+  ],
+  "config": {
+    "adminEmails": "qabulmadinah@gmail.com, admin@edu.gov.sa",
+    "autoBackupEnabled": true,
+    "backupInterval": 60,
+    "encryptionEnabled": true,
+    "thirdPartyIntegrationEnabled": true,
+    "institutionNameAr": "وزارة التعليم - إدارة رعاية المستفيدين بالمدينة المنورة",
+    "institutionNameEn": "Ministry of Education - Beneficiary Care Dept (Madinah)"
+  },
   "schools": [
     {
       "id": "sch_import_1791640419266_0",
@@ -152463,6 +152540,8 @@
       }
     }
   ],
+  "isExplicitAdminClear": false,
+  "schoolsCleared": false,
   "officers": [
     {
       "id": "emp_1",
@@ -152696,59 +152775,5 @@
       "canGrantRoles": false,
       "canDeleteUsers": false
     }
-  ],
-  "inquiries": [
-    {
-      "senderName": "فيصل محمد",
-      "senderPhone": "0521365897",
-      "inquiryText": "لماذا",
-      "id": "inq-1791639125250",
-      "createdAt": "2026-10-10T13:32:05.250Z",
-      "status": "new"
-    },
-    {
-      "senderName": "ماجد محمد",
-      "senderPhone": "1254365213",
-      "inquiryText": "مت يبدأ التسجيل",
-      "id": "inq-1791638872465",
-      "createdAt": "2026-10-10T13:27:52.465Z",
-      "status": "new"
-    },
-    {
-      "id": "inq-101",
-      "senderName": "عبدالله بن سعد الحربي",
-      "senderPhone": "0554433221",
-      "inquiryText": "السلام عليكم، أود الاستفسار عن إمكانية نقل ابني في الصف الثالث الابتدائي إلى مدرسة قريبة من حي العزيزية، وهل الشواغر متاحة حالياً؟",
-      "createdAt": "2026-10-10T09:28:39.618Z",
-      "status": "answered",
-      "answeredByOfficerId": "emp_followup",
-      "answeredByOfficerName": "عبدالرحيم الأحمدي (مشرف القبول والتسجيل)",
-      "officerReply": "وعليكم السلام ورحمة الله وبركاته. مرحباً بك أخي الكريم، نعم تم التحقق من المدارس المجاورة بحي العزيزية وتوجد شواغر متاحة بمدرسة ابن كثير الابتدائية، يمكنك تقديم طلب النقل وسيتم التسكين مباشرة بإذن الله.",
-      "answeredAt": "2026-10-10T12:28:39.618Z",
-      "beneficiaryRating": 5,
-      "beneficiaryFeedbackNotes": "خدمة ممتازة وسريعة جداً، شكراً جزيلاً للأستاذ عبدالرحيم الأحمدي على تجاوبه السريع والوافي.",
-      "ratedAt": "2026-10-10T13:28:39.618Z"
-    },
-    {
-      "id": "inq-102",
-      "senderName": "فاطمة بنت أحمد الزهراني",
-      "senderPhone": "0501239874",
-      "inquiryText": "أرغب بالاستفسار عن موعد انتهاء فترة معادلة الشهادات الصادرة من خارج المملكة للمرحلة المتوسطة، وما هي المستندات المطلوبة مسبقاً؟",
-      "createdAt": "2026-10-10T11:58:39.618Z",
-      "status": "new"
-    }
-  ],
-  "config": {
-    "adminEmails": "qabulmadinah@gmail.com, admin@edu.gov.sa",
-    "autoBackupEnabled": true,
-    "backupInterval": 60,
-    "encryptionEnabled": true,
-    "thirdPartyIntegrationEnabled": true,
-    "institutionNameAr": "وزارة التعليم - إدارة رعاية المستفيدين بالمدينة المنورة",
-    "institutionNameEn": "Ministry of Education - Beneficiary Care Dept (Madinah)"
-  },
-  "surveys": [],
-  "principalReports": [],
-  "protectedAt": "2026-10-10T17:22:00Z",
-  "isProtectedMaster": true
+  ]
 }

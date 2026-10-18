@@ -210,6 +210,244 @@ async function startServer() {
     }
   });
 
+  // =========================================================================
+  // REAL-TIME SSE (Server-Sent Events) & REALTIME DISPATCH ENGINE
+  // =========================================================================
+  const sseClients = new Set<express.Response>();
+
+  function broadcastSSE(event: { type: string; data?: any; timestamp?: string }) {
+    const payload = `data: ${JSON.stringify({ ...event, timestamp: event.timestamp || new Date().toISOString() })}\n\n`;
+    for (const client of sseClients) {
+      try {
+        client.write(payload);
+      } catch (_) {
+        sseClients.delete(client);
+      }
+    }
+  }
+
+  // Heartbeat ping every 15s to keep connections alive across networks/proxies
+  setInterval(() => {
+    const ping = `: ping\n\n`;
+    for (const client of sseClients) {
+      try {
+        client.write(ping);
+      } catch (_) {
+        sseClients.delete(client);
+      }
+    }
+  }, 15000);
+
+  // Endpoint: Real-time Event Stream (SSE)
+  app.get("/api/events", (req, res): any => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders?.();
+
+    res.write(`data: ${JSON.stringify({ type: "CONNECTED", timestamp: new Date().toISOString() })}\n\n`);
+    sseClients.add(res);
+
+    req.on("close", () => {
+      sseClients.delete(res);
+    });
+  });
+
+  // Storage helper functions ensuring atomic, safe writes and anti-downgrade retention
+  function getSafeServerStorage(): any {
+    let existingData: any = {};
+    if (fs.existsSync(STORAGE_FILE)) {
+      try {
+        existingData = JSON.parse(fs.readFileSync(STORAGE_FILE, "utf-8"));
+      } catch {
+        existingData = {};
+      }
+    }
+    if ((!existingData.schools || existingData.schools.length < 2940) && fs.existsSync(MASTER_PROTECTED_FILE)) {
+      try {
+        const master = JSON.parse(fs.readFileSync(MASTER_PROTECTED_FILE, "utf-8"));
+        if (Array.isArray(master.schools)) existingData.schools = master.schools;
+        if (Array.isArray(master.officers)) existingData.officers = master.officers;
+      } catch {}
+    }
+    if (!Array.isArray(existingData.inquiries)) existingData.inquiries = [];
+    if (!Array.isArray(existingData.surveys)) existingData.surveys = [];
+    if (!Array.isArray(existingData.officers)) existingData.officers = [];
+    return existingData;
+  }
+
+  function saveSafeServerStorage(data: any): boolean {
+    try {
+      const tempFile = `${STORAGE_FILE}.tmp.${Date.now()}`;
+      fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), "utf-8");
+      fs.renameSync(tempFile, STORAGE_FILE);
+      if (Array.isArray(data.schools) && data.schools.length >= 2940) {
+        fs.writeFileSync(MASTER_PROTECTED_FILE, JSON.stringify(data, null, 2), "utf-8");
+      }
+      return true;
+    } catch (e) {
+      console.error("Save safe storage failed:", e);
+      return false;
+    }
+  }
+
+  // Dedicated Endpoint: Fetch latest inquiries (ultra-lightweight & fast)
+  app.get("/api/inquiries", (_req, res): any => {
+    try {
+      const data = getSafeServerStorage();
+      return res.json({ success: true, count: data.inquiries.length, data: data.inquiries });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to fetch inquiries" });
+    }
+  });
+
+  // Dedicated Endpoint: Beneficiary submits inquiry (INSTANT dispatch to all officers)
+  app.post("/api/inquiries", (req, res): any => {
+    try {
+      const body = req.body;
+      if (!body || !body.senderName || !body.inquiryText) {
+        return res.status(400).json({ success: false, error: "بيانات الاستفسار غير مكتملة" });
+      }
+
+      const data = getSafeServerStorage();
+      const newInquiry = {
+        id: body.id || `inq-${Date.now()}`,
+        senderName: String(body.senderName).trim(),
+        senderPhone: body.senderPhone ? String(body.senderPhone).trim() : undefined,
+        inquiryText: String(body.inquiryText).trim(),
+        createdAt: body.createdAt || new Date().toISOString(),
+        status: body.status || 'new',
+        claimedByOfficerId: body.claimedByOfficerId,
+        claimedByOfficerName: body.claimedByOfficerName,
+        claimedAt: body.claimedAt,
+        officerReply: body.officerReply,
+        answeredByOfficerId: body.answeredByOfficerId,
+        answeredByOfficerName: body.answeredByOfficerName,
+        answeredAt: body.answeredAt
+      };
+
+      // Add new inquiry at the top
+      data.inquiries = [newInquiry, ...(data.inquiries || []).filter((i: any) => i.id !== newInquiry.id)];
+      saveSafeServerStorage(data);
+
+      // Real-time broadcast immediately to all admission officers and connected screens
+      broadcastSSE({ type: "NEW_INQUIRY", data: newInquiry });
+
+      return res.json({ success: true, inquiry: newInquiry, count: data.inquiries.length });
+    } catch (err: any) {
+      console.error("Error creating inquiry:", err);
+      return res.status(500).json({ success: false, error: err?.message || "Inquiry creation failed" });
+    }
+  });
+
+  // Dedicated Endpoint: Update inquiry (claim, unclaim, reply, rate) with real-time broadcast
+  app.put("/api/inquiries/:id", (req, res): any => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      const data = getSafeServerStorage();
+
+      let targetItem: any = null;
+      data.inquiries = (data.inquiries || []).map((item: any) => {
+        if (item.id === id) {
+          targetItem = { ...item, ...updates, id };
+          return targetItem;
+        }
+        return item;
+      });
+
+      if (!targetItem) {
+        targetItem = { ...updates, id };
+        data.inquiries.unshift(targetItem);
+      }
+
+      saveSafeServerStorage(data);
+
+      // Broadcast update in real-time
+      broadcastSSE({ type: "UPDATE_INQUIRY", data: targetItem });
+
+      return res.json({ success: true, inquiry: targetItem });
+    } catch (err: any) {
+      console.error("Error updating inquiry:", err);
+      return res.status(500).json({ success: false, error: err?.message || "Inquiry update failed" });
+    }
+  });
+
+  // Dedicated Endpoint: Fetch latest surveys/requests (fast & lightweight)
+  app.get("/api/surveys", (_req, res): any => {
+    try {
+      const data = getSafeServerStorage();
+      return res.json({ success: true, count: data.surveys.length, data: data.surveys });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to fetch surveys" });
+    }
+  });
+
+  // Dedicated Endpoint: Beneficiary submits survey/request (INSTANT dispatch to all officers)
+  app.post("/api/surveys", (req, res): any => {
+    try {
+      const body = req.body;
+      if (!body) {
+        return res.status(400).json({ success: false, error: "بيانات الطلب غير صالحة" });
+      }
+
+      const data = getSafeServerStorage();
+      const nowStr = new Date().toISOString();
+      const newSurvey = {
+        ...body,
+        id: body.id || `SURV-${Math.floor(100 + Math.random() * 900)}`,
+        createdAt: body.createdAt || nowStr,
+        lastUpdatedAt: nowStr,
+        isSynced: true
+      };
+
+      data.surveys = [newSurvey, ...(data.surveys || []).filter((s: any) => s.id !== newSurvey.id)];
+      saveSafeServerStorage(data);
+
+      // Real-time broadcast immediately to all admission officers
+      broadcastSSE({ type: "NEW_SURVEY", data: newSurvey });
+
+      return res.json({ success: true, survey: newSurvey, count: data.surveys.length });
+    } catch (err: any) {
+      console.error("Error creating survey:", err);
+      return res.status(500).json({ success: false, error: err?.message || "Survey creation failed" });
+    }
+  });
+
+  // Dedicated Endpoint: Update survey/request (resolve, assign, notes) with real-time broadcast
+  app.put("/api/surveys/:id", (req, res): any => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      const data = getSafeServerStorage();
+
+      let targetItem: any = null;
+      data.surveys = (data.surveys || []).map((item: any) => {
+        if (item.id === id) {
+          targetItem = { ...item, ...updates, id, lastUpdatedAt: new Date().toISOString() };
+          return targetItem;
+        }
+        return item;
+      });
+
+      if (!targetItem) {
+        targetItem = { ...updates, id };
+        data.surveys.unshift(targetItem);
+      }
+
+      saveSafeServerStorage(data);
+
+      // Broadcast update in real-time
+      broadcastSSE({ type: "UPDATE_SURVEY", data: targetItem });
+
+      return res.json({ success: true, survey: targetItem });
+    } catch (err: any) {
+      console.error("Error updating survey:", err);
+      return res.status(500).json({ success: false, error: err?.message || "Survey update failed" });
+    }
+  });
+
   // Endpoint: Save and merge data to server with strict anti-loss protection
   app.post("/api/sync/data", (req, res): any => {
     try {
@@ -330,6 +568,17 @@ async function startServer() {
       if (!fs.existsSync(snapshotPath)) {
         fs.copyFileSync(STORAGE_FILE, snapshotPath);
       }
+
+      // Broadcast general data sync event
+      broadcastSSE({
+        type: "DATA_SYNC",
+        data: {
+          surveysCount: mergedData.surveys?.length || 0,
+          inquiriesCount: mergedData.inquiries?.length || 0,
+          schoolsCount: mergedData.schools?.length || 0,
+          officersCount: mergedData.officers?.length || 0
+        }
+      });
 
       return res.json({
         success: true,

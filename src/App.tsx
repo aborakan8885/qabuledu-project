@@ -11,7 +11,13 @@ import Portal from './components/Portal';
 import ErrorBoundary from './components/ErrorBoundary';
 import ContactFeedbackModal from './components/ContactFeedbackModal';
 import InquiriesModal from './components/InquiriesModal';
-import SiteAccessGate from './components/SiteAccessGate';
+import { 
+  initRealtimeSync, 
+  submitInquiryRealtime, 
+  updateInquiryRealtime, 
+  submitSurveyRealtime, 
+  updateSurveyRealtime 
+} from './utils/realtimeEngine';
 import { Language, SurveyResponse, AppConfig, EmailLog, SystemIntegrationLog, PrincipalReport, SchoolItem, BeneficiaryFeedback, BeneficiaryInquiry } from './types';
 import { sendOfficialEmail } from './utils/emailService';
 import { getSafeTranslation } from './utils/translationHelper';
@@ -52,16 +58,12 @@ export default function App() {
     return (cached === 'dark' || cached === 'light') ? cached : 'light';
   });
 
-  // Site Gate Passcode Protection Disabled as requested
-  const [isSiteUnlocked, setIsSiteUnlocked] = useState<boolean>(true);
-
-  const handleLockSite = () => {
-    try {
-      sessionStorage.removeItem('site_access_granted_v1');
-      localStorage.removeItem('site_access_granted_v1');
-    } catch (_) {}
-    setIsSiteUnlocked(false);
-  };
+  // Real-time notification banner state for instant officer alerts
+  const [realtimeNotification, setRealtimeNotification] = useState<{
+    title: string;
+    message: string;
+    type: 'inquiry' | 'survey';
+  } | null>(null);
 
   useEffect(() => {
     localStorage.setItem('app_theme', theme);
@@ -298,22 +300,44 @@ export default function App() {
       createdAt: new Date().toISOString(),
       status: 'new'
     };
-    setInquiries(prev => [item, ...prev]);
-    setAlertToast({ message: 'تم إرسال استفسارك بنجاح لمسؤول القبول!', type: 'success' });
+    setInquiries(prev => {
+      const exists = prev.some(i => i.id === item.id);
+      const next = exists ? prev : [item, ...prev];
+      saveInquiriesToStorage(next);
+      return next;
+    });
+
+    // Immediate dispatch to server without any delay
+    submitInquiryRealtime(item).catch(() => {});
+
+    setAlertToast({ message: 'تم إرسال استفسارك بنجاح وفوراً لمسؤولي القبول!', type: 'success' });
   };
 
   const handleRateInquiry = (inquiryId: string, rating: number, notes?: string) => {
-    setInquiries(prev => prev.map(inq => {
-      if (inq.id === inquiryId) {
-        return {
-          ...inq,
-          beneficiaryRating: rating,
-          beneficiaryFeedbackNotes: notes || inq.beneficiaryFeedbackNotes,
-          ratedAt: new Date().toISOString()
-        };
-      }
-      return inq;
-    }));
+    const ratedAt = new Date().toISOString();
+    setInquiries(prev => {
+      const next = prev.map(inq => {
+        if (inq.id === inquiryId) {
+          return {
+            ...inq,
+            beneficiaryRating: rating,
+            beneficiaryFeedbackNotes: notes || inq.beneficiaryFeedbackNotes,
+            ratedAt
+          };
+        }
+        return inq;
+      });
+      saveInquiriesToStorage(next);
+      return next;
+    });
+
+    // Immediate update to server
+    updateInquiryRealtime(inquiryId, {
+      beneficiaryRating: rating,
+      beneficiaryFeedbackNotes: notes,
+      ratedAt
+    }).catch(() => {});
+
     setAlertToast({ message: 'تم حفظ تقييمك للخدمة بنجاح ⭐', type: 'success' });
   };
 
@@ -456,6 +480,50 @@ export default function App() {
     });
   }, []);
 
+  // Initialize Real-time synchronization (SSE stream + BroadcastChannel + high-frequency sync)
+  useEffect(() => {
+    const cleanup = initRealtimeSync({
+      onNewInquiry: (newInq) => {
+        setInquiries(prev => {
+          if (prev.some(i => i.id === newInq.id)) return prev;
+          const next = [newInq, ...prev];
+          saveInquiriesToStorage(next);
+          return next;
+        });
+      },
+      onUpdateInquiry: (updatedInq) => {
+        setInquiries(prev => {
+          const next = prev.map(i => i.id === updatedInq.id ? { ...i, ...updatedInq } : i);
+          saveInquiriesToStorage(next);
+          return next;
+        });
+      },
+      onNewSurvey: (newSurvey) => {
+        setSurveys(prev => {
+          if (prev.some(s => s.id === newSurvey.id)) return prev;
+          const next = [newSurvey, ...prev];
+          saveSurveysToStorage(next);
+          return next;
+        });
+      },
+      onUpdateSurvey: (updatedSurvey) => {
+        setSurveys(prev => {
+          const next = prev.map(s => s.id === updatedSurvey.id ? { ...s, ...updatedSurvey } : s);
+          saveSurveysToStorage(next);
+          return next;
+        });
+      },
+      onNotification: (notif) => {
+        setRealtimeNotification(notif);
+        setTimeout(() => setRealtimeNotification(null), 6000);
+      }
+    });
+
+    return () => {
+      cleanup();
+    };
+  }, []);
+
   useEffect(() => {
     if (!isInitialLoaded) return;
     const timer = setTimeout(() => {
@@ -513,6 +581,9 @@ export default function App() {
       return next;
     });
 
+    // Immediate dispatch to server without any delay
+    submitSurveyRealtime(newResponse).catch(() => {});
+
     const ratedStaff = newResponse.staffSatisfaction && newResponse.staffSatisfaction > 0;
     const ratedReception = newResponse.receptionSatisfaction && newResponse.receptionSatisfaction > 0;
     const isNegativeFeedback = (ratedStaff && newResponse.staffSatisfaction < 3) || (ratedReception && newResponse.receptionSatisfaction < 3);
@@ -566,6 +637,8 @@ export default function App() {
       saveSurveysToStorage(next);
       return next;
     });
+    // Immediate dispatch to server in real time
+    updateSurveyRealtime(updatedSurvey.id, updatedSurvey).catch(() => {});
   };
 
   const handleDeleteReport = (id: string) => {
@@ -651,16 +724,6 @@ export default function App() {
 
   const handleUpdateConfig = (newConfig: AppConfig) => setConfig(newConfig);
 
-  // Site Passcode Lock Screen (Nothing is displayed until correct password is submitted)
-  if (!isSiteUnlocked) {
-    return (
-      <SiteAccessGate 
-        onUnlock={() => setIsSiteUnlocked(true)} 
-        theme={theme} 
-      />
-    );
-  }
-
   return (
     <div
       className={`min-h-screen flex flex-col font-sans select-none antialiased transition-colors duration-300 ${
@@ -684,7 +747,6 @@ export default function App() {
         canGoBack={historyStackRef.current.length > 0}
         theme={theme}
         onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-        onLockSite={handleLockSite}
         principalSession={principalSession}
       />
 
@@ -797,6 +859,38 @@ export default function App() {
                 <div className="bg-teal-500 h-full" style={{ width: `${batchProgress}%` }} />
              </div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Real-time Officer Alert Toast (Instant popup when beneficiary sends inquiry or request) */}
+      <AnimatePresence>
+        {realtimeNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: -40, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -30, scale: 0.95 }}
+            className="fixed top-20 right-4 sm:right-6 z-[120] max-w-sm sm:max-w-md w-full bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-4 rounded-2xl shadow-2xl border-2 border-emerald-300/60 backdrop-blur-md flex items-center gap-3.5 select-none"
+            dir="rtl"
+          >
+            <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0 border border-white/30 shadow-xs">
+              <Zap className="w-6 h-6 text-amber-300 animate-bounce" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping shrink-0" />
+                <h4 className="text-xs sm:text-sm font-black text-amber-200">{realtimeNotification.title}</h4>
+              </div>
+              <p className="text-xs font-semibold text-white/95 mt-0.5 truncate">{realtimeNotification.message}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setRealtimeNotification(null)}
+              className="p-1 hover:bg-white/20 rounded-full transition-colors cursor-pointer text-white/80 hover:text-white shrink-0"
+              title="إغلاق التنبيه"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
 

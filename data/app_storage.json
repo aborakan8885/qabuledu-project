@@ -1,8 +1,32 @@
 {
   "principalReports": [],
-  "lastSyncedAt": "2026-10-10T17:27:29.475Z",
-  "surveys": [],
+  "lastSyncedAt": "2026-10-18T06:14:26.521Z",
+  "surveys": [
+    {
+      "beneficiaryName": "خالد بن صالح الحربي",
+      "nationalId": "1098765432",
+      "surveyType": "admission",
+      "currentSchool": "مدرسة طيبة الابتدائية",
+      "status": "pending",
+      "id": "SURV-562",
+      "createdAt": "2026-10-18T06:33:18.016Z",
+      "lastUpdatedAt": "2026-10-18T06:33:18.016Z",
+      "isSynced": true
+    }
+  ],
   "inquiries": [
+    {
+      "id": "inq-1792305184729",
+      "senderName": "أحمد الحربي",
+      "senderPhone": "0555555555",
+      "inquiryText": "استفسار تجريبي للتأكد من المزامنة الفورية اللحظية دون تحديث للصفحة",
+      "createdAt": "2026-10-18T06:33:04.729Z",
+      "status": "answered",
+      "answeredByOfficerId": "emp_101",
+      "answeredByOfficerName": "سالم محمد الترجمي",
+      "officerReply": "أهلاً بك، تم فحص استفسارك والرد عليه فورياً بنجاح.",
+      "answeredAt": "2026-10-18T06:33:00.000Z"
+    },
     {
       "senderName": "فيصل محمد",
       "senderPhone": "0521365897",

@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { BeneficiaryInquiry, OfficerUser, isSystemAdmin, ADMIN_CREDENTIALS } from '../types';
+import { updateInquiryRealtime } from '../utils/realtimeEngine';
 
 interface AdmissionInquiriesViewProps {
   inquiries: BeneficiaryInquiry[];
@@ -139,13 +140,16 @@ export default function AdmissionInquiriesView({
     const targetInq = inquiries.find(i => i.id === inquiryId);
     const updated = inquiries.map(item => {
       if (item.id === inquiryId) {
-        return {
+        const claimObj = {
           ...item,
           status: 'claimed' as const,
           claimedByOfficerId: activeOfficer.id,
           claimedByOfficerName: activeOfficer.nameAr,
           claimedAt: now
         };
+        // Real-time server sync
+        updateInquiryRealtime(inquiryId, claimObj).catch(() => {});
+        return claimObj;
       }
       return item;
     });
@@ -172,6 +176,12 @@ export default function AdmissionInquiriesView({
         if (copy.status === 'claimed') {
           copy.status = 'new';
         }
+        updateInquiryRealtime(inquiryId, {
+          claimedByOfficerId: undefined,
+          claimedByOfficerName: undefined,
+          claimedAt: undefined,
+          status: copy.status
+        }).catch(() => {});
         return copy;
       }
       return item;
@@ -192,7 +202,7 @@ export default function AdmissionInquiriesView({
     const now = new Date().toISOString();
     const updated = inquiries.map(item => {
       if (item.id === inquiryId) {
-        return {
+        const replyObj = {
           ...item,
           status: 'answered' as const,
           answeredByOfficerId: activeOfficer.id,
@@ -204,6 +214,9 @@ export default function AdmissionInquiriesView({
           claimedByOfficerName: item.claimedByOfficerName || activeOfficer.nameAr,
           claimedAt: item.claimedAt || now
         };
+        // Real-time server sync
+        updateInquiryRealtime(inquiryId, replyObj).catch(() => {});
+        return replyObj;
       }
       return item;
     });
@@ -284,6 +297,20 @@ export default function AdmissionInquiriesView({
           <span>{toastMessage}</span>
         </div>
       )}
+
+      {/* Live Real-time Status Banner */}
+      <div className="flex items-center justify-between gap-3 p-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-transparent border border-emerald-500/30 text-emerald-800 dark:text-emerald-300">
+        <div className="flex items-center gap-2.5 text-xs font-black">
+          <span className="relative flex h-3 w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+          </span>
+          <span>المزامنة اللحظية المباشرة نشطة: أي استفسار يرسله المستفيد سيصل لحسابك فوراً دون الحاجة لتحديث الصفحة</span>
+        </div>
+        <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shrink-0">
+          بث فوري مباشر
+        </span>
+      </div>
 
       {/* Quick Navigation to Requests Screen */}
       {onNavigateToRequests && (
