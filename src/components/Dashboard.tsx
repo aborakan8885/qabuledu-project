@@ -1601,7 +1601,7 @@ export default function Dashboard({
                   </button>
                   <button
                     type="button"
-                    onClick={() => window.open(cal.locationUrl || 'https://maps.google.com', '_blank')}
+                    onClick={() => window.open(cal.locationUrl || 'https://maps.google.com', '_blank', 'noopener,noreferrer')}
                     className="py-1 px-2 bg-[#e0f2fe] hover:bg-[#bae6fd] text-[#0369a1] border border-[#bae6fd] rounded-lg text-[8.5px] font-black flex items-center justify-center gap-1 transition-all cursor-pointer shadow-2xs"
                     title="فتح الموقع في خرائط Google"
                   >

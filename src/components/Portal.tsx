@@ -139,6 +139,48 @@ export default function Portal({
   const [showMapWarningModal, setShowMapWarningModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
+  // Admin Passcode Gate for Map, Parent, and Principal cards
+  const [protectedModalTarget, setProtectedModalTarget] = useState<'map' | 'parent' | 'principal' | null>(null);
+  const [protectedPasscode, setProtectedPasscode] = useState<string>('');
+  const [protectedPasscodeError, setProtectedPasscodeError] = useState<string>('');
+  const [showProtectedPasscode, setShowProtectedPasscode] = useState<boolean>(false);
+
+  const handleOpenProtectedCard = (target: 'map' | 'parent' | 'principal') => {
+    setProtectedModalTarget(target);
+    setProtectedPasscode('');
+    setProtectedPasscodeError('');
+    setShowProtectedPasscode(false);
+  };
+
+  const handleVerifyProtectedPasscode = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (protectedPasscode.trim().toLowerCase() !== 'salim1392') {
+      setProtectedPasscodeError(
+        isRtl ? 'رمز الدخول غير صحيح! الدخول متاح للأدمن فقط.' : 'Invalid passcode! Access restricted to Admin only.'
+      );
+      return;
+    }
+
+    const target = protectedModalTarget;
+    setProtectedModalTarget(null);
+    setProtectedPasscode('');
+    setProtectedPasscodeError('');
+
+    if (target === 'map') {
+      window.open('https://mapedumadinah.com/', '_blank', 'noopener,noreferrer');
+    } else if (target === 'parent') {
+      setView('parent-choices');
+    } else if (target === 'principal') {
+      if (principalSession) {
+        setView('principal-dashboard');
+      } else {
+        setView('principal-login');
+        setPrincipalAuthMode('login');
+        setLoginError('');
+      }
+    }
+  };
+
   // Helper for safe translation
   const st = (key: string, fallback?: string) => getSafeTranslation(currentLang, key, fallback);
 
@@ -892,7 +934,7 @@ export default function Portal({
               
               {/* Card 1: Educational Schools Map (خارطة المدارس التعليمية) */}
               <motion.div
-                onClick={() => window.open('https://mapedumadinah.com/', '_blank')}
+                onClick={() => handleOpenProtectedCard('map')}
                 className={`group relative rounded-2xl portal-card-padding cursor-pointer transition-colors duration-150 flex flex-col justify-between overflow-hidden shadow-sm border h-full ${
                   isDark
                     ? 'glass-card-dark hover:bg-[#074738] hover:border-[#0d624e] hover:shadow-xl'
@@ -947,7 +989,7 @@ export default function Portal({
 
               {/* Card 2: Parent Beneficiary (ولي أمر) */}
               <motion.div
-                onClick={() => setView('parent-choices')}
+                onClick={() => handleOpenProtectedCard('parent')}
                 className={`group relative rounded-2xl portal-card-padding cursor-pointer transition-colors duration-150 flex flex-col justify-between overflow-hidden shadow-sm border h-full ${
                   isDark
                     ? 'glass-card-dark hover:bg-[#074738] hover:border-[#0d624e] hover:shadow-xl'
@@ -1002,15 +1044,7 @@ export default function Portal({
 
               {/* Card 3: School Principal Beneficiary (مدير مدرسة) */}
               <motion.div
-                onClick={() => {
-                  if (principalSession) {
-                    setView('principal-dashboard');
-                  } else {
-                    setView('principal-login');
-                    setPrincipalAuthMode('login');
-                    setLoginError('');
-                  }
-                }}
+                onClick={() => handleOpenProtectedCard('principal')}
                 className={`group relative rounded-2xl portal-card-padding cursor-pointer transition-colors duration-150 flex flex-col justify-between overflow-hidden shadow-sm border h-full ${
                   isDark
                     ? 'glass-card-dark hover:bg-[#074738] hover:border-[#0d624e] hover:shadow-xl'
@@ -5580,7 +5614,7 @@ export default function Portal({
                 <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
                   <button
                     onClick={() => {
-                      window.open('https://mapedumadinah.com/', '_blank');
+                      window.open('https://mapedumadinah.com/', '_blank', 'noopener,noreferrer');
                     }}
                     className={`w-full sm:flex-1 flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl font-black text-sm transition-all shadow-md cursor-pointer ${
                       isDark 
@@ -5616,6 +5650,131 @@ export default function Portal({
       </AnimatePresence>
 
 
+
+      {/* Admin Passcode Verification Modal for Protected Cards (Map, Parent, Principal) */}
+      <AnimatePresence>
+        {protectedModalTarget && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/65 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className={`relative w-full max-w-md rounded-3xl overflow-hidden shadow-2xl border ${
+                isDark ? 'bg-[#061c24] border-teal-800/60 text-white' : 'bg-white border-slate-200 text-slate-900'
+              }`}
+            >
+              <div className="absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-r from-[#0d624e] via-teal-500 to-emerald-500" />
+
+              <form onSubmit={handleVerifyProtectedPasscode} className="p-6 sm:p-8 space-y-5 text-start">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-3 rounded-2xl border ${
+                      isDark ? 'bg-teal-900/50 border-teal-700/60 text-emerald-400' : 'bg-teal-50 border-teal-200 text-[#0d624e]'
+                    }`}>
+                      <Lock className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className={`text-lg font-black ${isDark ? 'text-white' : 'text-slate-800'}`}>
+                        {isRtl ? 'رمز دخول الأدمن مطلوب' : 'Admin Passcode Required'}
+                      </h3>
+                      <p className={`text-xs font-bold mt-0.5 ${isDark ? 'text-teal-300/80' : 'text-slate-500'}`}>
+                        {protectedModalTarget === 'map'
+                          ? (isRtl ? 'خارطة المدارس التعليمية' : 'Educational Schools Map')
+                          : protectedModalTarget === 'parent'
+                            ? (isRtl ? 'مستفيد ولي أمر' : 'Parent Beneficiary')
+                            : (isRtl ? 'مستفيد مدير مدرسة' : 'School Principal')}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProtectedModalTarget(null);
+                      setProtectedPasscode('');
+                      setProtectedPasscodeError('');
+                    }}
+                    className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                      isDark ? 'hover:bg-teal-900/50 text-teal-300' : 'hover:bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <p className={`text-xs font-bold leading-relaxed ${isDark ? 'text-teal-100/90' : 'text-slate-600'}`}>
+                  {isRtl
+                    ? 'هذه الأيقونة محمية ومخصصة للأدمن فقط. يرجى إدخال رمز الدخول السري للمتابعة:'
+                    : 'This section is restricted to Admin only. Please enter the secret passcode to continue:'}
+                </p>
+
+                <div className="space-y-2">
+                  <div className="relative">
+                    <input
+                      type={showProtectedPasscode ? 'text' : 'password'}
+                      value={protectedPasscode}
+                      onChange={(e) => {
+                        setProtectedPasscode(e.target.value);
+                        if (protectedPasscodeError) setProtectedPasscodeError('');
+                      }}
+                      placeholder={isRtl ? 'أدخل رمز الدخول الخاص بالأدمن...' : 'Enter admin passcode...'}
+                      autoFocus
+                      dir="ltr"
+                      className={`w-full px-4 py-3.5 rounded-2xl font-black text-center text-sm tracking-wider outline-none border transition-all ${
+                        protectedPasscodeError
+                          ? 'border-red-500 bg-red-50/40 dark:bg-red-950/30 text-red-600 dark:text-red-300'
+                          : isDark
+                            ? 'bg-[#04141b] border-teal-800/70 text-white focus:border-emerald-400'
+                            : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-[#0d624e] focus:bg-white'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowProtectedPasscode(!showProtectedPasscode)}
+                      className={`absolute top-1/2 -translate-y-1/2 ${isRtl ? 'left-3.5' : 'right-3.5'} p-1.5 rounded-lg transition-colors cursor-pointer ${
+                        isDark ? 'text-teal-400 hover:text-white' : 'text-slate-400 hover:text-slate-700'
+                      }`}
+                    >
+                      {showProtectedPasscode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+
+                  {protectedPasscodeError && (
+                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 text-xs font-black">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>{protectedPasscodeError}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="submit"
+                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl font-black text-sm bg-[#0d624e] hover:bg-[#094b3b] text-white shadow-lg transition-all cursor-pointer"
+                  >
+                    <KeyRound className="w-4 h-4" />
+                    <span>{isRtl ? 'تأكيد ودخول' : 'Confirm & Enter'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProtectedModalTarget(null);
+                      setProtectedPasscode('');
+                      setProtectedPasscodeError('');
+                    }}
+                    className={`px-5 py-3.5 rounded-2xl font-black text-sm border transition-all cursor-pointer ${
+                      isDark
+                        ? 'border-teal-800/60 text-teal-300 hover:bg-teal-900/30'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    {isRtl ? 'إلغاء' : 'Cancel'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Student Admission Age Verification Modal */}
       <AgeVerificationModal

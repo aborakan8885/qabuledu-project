@@ -1040,6 +1040,30 @@ async function startServer() {
     res.type('text/plain').send("loaderio-7103f8a28cf58d4ccd87bed4e090afe6");
   });
 
+  // Dedicated Endpoint: Download Complete Codebase as single text file
+  app.get(["/api/download-source-code", "/download-code", "/PROJECT_COMPLETE_SOURCE_CODE.txt"], (req, res) => {
+    const codeFilePath = path.join(process.cwd(), "PROJECT_COMPLETE_SOURCE_CODE.txt");
+    if (fs.existsSync(codeFilePath)) {
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Content-Disposition", 'attachment; filename="PROJECT_COMPLETE_SOURCE_CODE.txt"');
+      return res.sendFile(codeFilePath);
+    }
+    return res.status(404).send("Source code file not found");
+  });
+
+  // Secure Cookie Check Route
+  app.get("/__cookie_check.html", (_req, res) => {
+    const cookieCheckPath = path.join(process.cwd(), "public", "__cookie_check.html");
+    if (fs.existsSync(cookieCheckPath)) {
+      return res.sendFile(cookieCheckPath);
+    }
+    const rootPath = path.join(process.cwd(), "__cookie_check.html");
+    if (fs.existsSync(rootPath)) {
+      return res.sendFile(rootPath);
+    }
+    return res.status(404).send("Not found");
+  });
+
   // Vite middleware for development / Static file serving for production
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

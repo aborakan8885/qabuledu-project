@@ -1,6 +1,6 @@
 {
   "principalReports": [],
-  "lastSyncedAt": "2026-10-21T04:08:42.226Z",
+  "lastSyncedAt": "2026-10-21T04:50:57.658Z",
   "surveys": [
     {
       "beneficiaryName": "طالب تجريبي",
@@ -20,6 +20,16 @@
       "id": "SURV-562",
       "createdAt": "2026-10-18T06:33:18.016Z",
       "lastUpdatedAt": "2026-10-18T06:33:18.016Z",
+      "isSynced": true
+    },
+    {
+      "beneficiaryName": "طالب فحص المزامنة السحابية",
+      "phoneNumber": "0509998877",
+      "problemType": "vacancies_unavailable",
+      "schoolName": "مدرسة الملك عبدالعزيز",
+      "id": "SURV-192",
+      "createdAt": "2026-10-21T04:17:03.779Z",
+      "lastUpdatedAt": "2026-10-21T04:17:03.779Z",
       "isSynced": true
     }
   ],
@@ -81,6 +91,34 @@
       "senderPhone": "0501239874",
       "inquiryText": "أرغب بالاستفسار عن موعد انتهاء فترة معادلة الشهادات الصادرة من خارج المملكة للمرحلة المتوسطة، وما هي المستندات المطلوبة مسبقاً؟",
       "createdAt": "2026-10-10T11:58:39.618Z",
+      "status": "new"
+    },
+    {
+      "createdAt": "2026-10-21T04:22:35.844Z",
+      "inquiryText": "تجربه",
+      "updatedAtServer": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1792556629,
+        "nanoseconds": 568000000
+      },
+      "status": "answered",
+      "senderPhone": "٠٥٨٧٤٢٥٣٦٩",
+      "id": "inq-1792556555843",
+      "senderName": "تحربه",
+      "claimedByOfficerName": "سالم محمد الترجمي",
+      "claimedByOfficerId": "emp_1",
+      "claimedAt": "2026-10-21T04:23:29.280Z",
+      "answeredByOfficerName": "سالم محمد الترجمي",
+      "answeredByOfficerId": "emp_1",
+      "officerReply": "قيد المعالجة",
+      "answeredAt": "2026-10-21T04:23:49.328Z"
+    },
+    {
+      "id": "inq-1792556219144",
+      "senderName": "فحص نهائي بعد المزامنة",
+      "senderPhone": "0501112233",
+      "inquiryText": "تجربة وصول الاستفسار عبر الخادم وقاعدة البيانات السحابية",
+      "createdAt": "2026-10-21T04:16:59.144Z",
       "status": "new"
     }
   ],
