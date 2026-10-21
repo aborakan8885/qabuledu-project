@@ -1,7 +1,16 @@
 {
   "principalReports": [],
-  "lastSyncedAt": "2026-10-18T06:14:26.521Z",
+  "lastSyncedAt": "2026-10-21T04:08:42.226Z",
   "surveys": [
+    {
+      "beneficiaryName": "طالب تجريبي",
+      "phoneNumber": "0512345678",
+      "problemType": "vacancies_unavailable",
+      "id": "SURV-747",
+      "createdAt": "2026-10-21T04:09:58.468Z",
+      "lastUpdatedAt": "2026-10-21T04:09:58.468Z",
+      "isSynced": true
+    },
     {
       "beneficiaryName": "خالد بن صالح الحربي",
       "nationalId": "1098765432",
@@ -15,6 +24,14 @@
     }
   ],
   "inquiries": [
+    {
+      "id": "inq-1792555719296",
+      "senderName": "اختبار فحص الخادم",
+      "senderPhone": "0500000000",
+      "inquiryText": "فحص الاستقبال من جهاز آخر",
+      "createdAt": "2026-10-21T04:08:39.296Z",
+      "status": "new"
+    },
     {
       "id": "inq-1792305184729",
       "senderName": "أحمد الحربي",

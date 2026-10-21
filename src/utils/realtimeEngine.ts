@@ -1,5 +1,13 @@
 import { BeneficiaryInquiry, SurveyResponse } from '../types';
 import { saveInquiriesToStorage, saveSurveysToStorage } from './storageEngine';
+import {
+  saveInquiryToCloud,
+  updateInquiryInCloud,
+  saveSurveyToCloud,
+  updateSurveyInCloud,
+  subscribeToInquiriesCloud,
+  subscribeToSurveysCloud
+} from './cloudSync';
 
 // =========================================================================
 // REAL-TIME AUDIO NOTIFICATION ENGINE (Web Audio API Synthesizer)
@@ -29,42 +37,41 @@ export function playNotificationChime(type: 'inquiry' | 'survey' | 'success' = '
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
-      osc.stop(ctx.currentTime + 0.45);
+      osc.stop(ctx.currentTime + 0.5);
     } else if (type === 'survey') {
-      // Warm chord chime (C5 -> G5)
+      // Deep reassuring chime (C5 -> G5)
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(523.25, ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(783.99, ctx.currentTime + 0.15);
       gain.gain.setValueAtTime(0.15, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
-      osc.stop(ctx.currentTime + 0.5);
+      osc.stop(ctx.currentTime + 0.6);
     } else {
+      // Quick gentle blip
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-      gain.gain.setValueAtTime(0.1, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.frequency.setValueAtTime(800, ctx.currentTime);
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
       osc.stop(ctx.currentTime + 0.3);
     }
   } catch (_) {
-    // Audio output might be restricted if no user interaction yet, safe to ignore
+    // Audio synthesis is non-critical
   }
 }
 
 // =========================================================================
-// CROSS-TAB BROADCAST CHANNEL
+// BROADCAST CHANNEL SETUP (Zero-latency instant cross-tab communication)
 // =========================================================================
-const CHANNEL_NAME = 'moe_portal_realtime_channel';
 let broadcastChannel: BroadcastChannel | null = null;
-
 try {
   if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-    broadcastChannel = new BroadcastChannel(CHANNEL_NAME);
+    broadcastChannel = new BroadcastChannel('moe_admissions_realtime_bus');
   }
 } catch (_) {
   broadcastChannel = null;
@@ -79,11 +86,11 @@ export function broadcastLocalEvent(type: string, data: any) {
 }
 
 // =========================================================================
-// REAL-TIME API DISPATCH METHODS (INSTANT SERVER STORAGE & NOTIFICATION)
+// REAL-TIME API DISPATCH METHODS (INSTANT CLOUD + SERVER DUAL PERSISTENCE)
 // =========================================================================
 
 /**
- * Submit inquiry instantly to server without waiting for debounced timers
+ * Submit inquiry instantly to cloud Firestore and local server
  */
 export async function submitInquiryRealtime(
   inquiryData: Omit<BeneficiaryInquiry, 'id' | 'createdAt' | 'status'> & { id?: string }
@@ -97,6 +104,15 @@ export async function submitInquiryRealtime(
     status: 'new'
   };
 
+  // 1. Instant Cloud Firestore save (guarantees cross-device arrival across all deployed instances)
+  saveInquiryToCloud(fallbackInquiry).catch((err) => {
+    console.warn('Direct Firestore saveInquiry error:', err);
+  });
+
+  // 2. Local Tab Broadcast
+  broadcastLocalEvent('NEW_INQUIRY', fallbackInquiry);
+
+  // 3. Server HTTP API Dispatch
   try {
     const res = await fetch('/api/inquiries', {
       method: 'POST',
@@ -107,28 +123,32 @@ export async function submitInquiryRealtime(
     if (res.ok) {
       const json = await res.json();
       if (json && json.inquiry) {
-        broadcastLocalEvent('NEW_INQUIRY', json.inquiry);
         return json.inquiry;
       }
     }
   } catch (err) {
-    console.warn('Real-time API inquiry submission failed, falling back to local resilience:', err);
+    console.warn('Real-time API inquiry submission fallback to cloud/local:', err);
   }
 
-  // Fallback broadcast
-  broadcastLocalEvent('NEW_INQUIRY', fallbackInquiry);
   return fallbackInquiry;
 }
 
 /**
- * Update inquiry in server immediately (claim, unclaim, reply, rating)
+ * Update inquiry in cloud Firestore and server immediately (claim, unclaim, reply, rating)
  */
 export async function updateInquiryRealtime(
   inquiryId: string,
   updates: Partial<BeneficiaryInquiry>
 ): Promise<boolean> {
+  // 1. Cloud Firestore Update
+  updateInquiryInCloud(inquiryId, updates).catch((err) => {
+    console.warn('Direct Firestore updateInquiry error:', err);
+  });
+
+  // 2. Local Tab Broadcast
   broadcastLocalEvent('UPDATE_INQUIRY', { ...updates, id: inquiryId });
 
+  // 3. Server HTTP API Dispatch
   try {
     const res = await fetch(`/api/inquiries/${inquiryId}`, {
       method: 'PUT',
@@ -137,17 +157,24 @@ export async function updateInquiryRealtime(
     });
     return res.ok;
   } catch (err) {
-    console.warn('Real-time API inquiry update failed:', err);
+    console.warn('Real-time API inquiry update fallback to cloud:', err);
     return false;
   }
 }
 
 /**
- * Submit survey/request instantly to server
+ * Submit survey/request instantly to cloud Firestore and server
  */
 export async function submitSurveyRealtime(survey: SurveyResponse): Promise<SurveyResponse> {
+  // 1. Cloud Firestore Save
+  saveSurveyToCloud(survey).catch((err) => {
+    console.warn('Direct Firestore saveSurvey error:', err);
+  });
+
+  // 2. Local Tab Broadcast
   broadcastLocalEvent('NEW_SURVEY', survey);
 
+  // 3. Server HTTP API Dispatch
   try {
     const res = await fetch('/api/surveys', {
       method: 'POST',
@@ -162,21 +189,28 @@ export async function submitSurveyRealtime(survey: SurveyResponse): Promise<Surv
       }
     }
   } catch (err) {
-    console.warn('Real-time API survey submission failed:', err);
+    console.warn('Real-time API survey submission fallback to cloud:', err);
   }
 
   return survey;
 }
 
 /**
- * Update survey in server immediately (status, assign, resolve)
+ * Update survey in cloud Firestore and server immediately (status, assign, resolve)
  */
 export async function updateSurveyRealtime(
   surveyId: string,
   updates: Partial<SurveyResponse>
 ): Promise<boolean> {
+  // 1. Cloud Firestore Update
+  updateSurveyInCloud(surveyId, updates).catch((err) => {
+    console.warn('Direct Firestore updateSurvey error:', err);
+  });
+
+  // 2. Local Tab Broadcast
   broadcastLocalEvent('UPDATE_SURVEY', { ...updates, id: surveyId });
 
+  // 3. Server HTTP API Dispatch
   try {
     const res = await fetch(`/api/surveys/${surveyId}`, {
       method: 'PUT',
@@ -185,13 +219,13 @@ export async function updateSurveyRealtime(
     });
     return res.ok;
   } catch (err) {
-    console.warn('Real-time API survey update failed:', err);
+    console.warn('Real-time API survey update fallback to cloud:', err);
     return false;
   }
 }
 
 // =========================================================================
-// REAL-TIME SYNC ENGINE (SSE + Cross-Tab + Resilient High-Speed Poller)
+// REAL-TIME SYNC ENGINE (Firestore Realtime + SSE + BroadcastChannel + Polling)
 // =========================================================================
 
 export interface RealtimeCallbacks {
@@ -214,22 +248,22 @@ export function initRealtimeSync(callbacks: RealtimeCallbacks): () => void {
   const knownInquiryIds = new Set<string>();
   const knownSurveyIds = new Set<string>();
 
-  // Initialize known IDs from localStorage if available
+  // Initialize known IDs from local caches
   try {
     const cachedInq = localStorage.getItem('beneficiary_inquiries_v1');
     if (cachedInq) {
       const arr = JSON.parse(cachedInq);
-      if (Array.isArray(arr)) arr.forEach(i => { if (i && i.id) knownInquiryIds.add(i.id); });
+      if (Array.isArray(arr)) arr.forEach((i) => { if (i && i.id) knownInquiryIds.add(i.id); });
     }
-    const cachedSurv = localStorage.getItem('parent_surveys_v1');
+    const cachedSurv = localStorage.getItem('beneficiary_surveys');
     if (cachedSurv) {
       const arr = JSON.parse(cachedSurv);
-      if (Array.isArray(arr)) arr.forEach(s => { if (s && s.id) knownSurveyIds.add(s.id); });
+      if (Array.isArray(arr)) arr.forEach((s) => { if (s && s.id) knownSurveyIds.add(s.id); });
     }
   } catch (_) {}
 
   // 1. Process New Inquiry Event
-  function handleNewInquiry(inquiry: BeneficiaryInquiry) {
+  function handleNewInquiry(inquiry: BeneficiaryInquiry, suppressChime = false) {
     if (!inquiry || !inquiry.id) return;
     const isNew = !knownInquiryIds.has(inquiry.id);
     knownInquiryIds.add(inquiry.id);
@@ -238,7 +272,7 @@ export function initRealtimeSync(callbacks: RealtimeCallbacks): () => void {
       callbacks.onNewInquiry(inquiry);
     }
 
-    if (isNew) {
+    if (isNew && !suppressChime) {
       playNotificationChime('inquiry');
       if (callbacks.onNotification) {
         callbacks.onNotification({
@@ -260,7 +294,7 @@ export function initRealtimeSync(callbacks: RealtimeCallbacks): () => void {
   }
 
   // 3. Process New Survey Event
-  function handleNewSurvey(survey: SurveyResponse) {
+  function handleNewSurvey(survey: SurveyResponse, suppressChime = false) {
     if (!survey || !survey.id) return;
     const isNew = !knownSurveyIds.has(survey.id);
     knownSurveyIds.add(survey.id);
@@ -269,7 +303,7 @@ export function initRealtimeSync(callbacks: RealtimeCallbacks): () => void {
       callbacks.onNewSurvey(survey);
     }
 
-    if (isNew) {
+    if (isNew && !suppressChime) {
       playNotificationChime('survey');
       if (callbacks.onNotification) {
         callbacks.onNotification({
@@ -290,7 +324,43 @@ export function initRealtimeSync(callbacks: RealtimeCallbacks): () => void {
     }
   }
 
-  // 5. Connect SSE Stream
+  // 5. Connect Cloud Firestore Realtime Push Subscriptions
+  let unsubscribeInquiries: (() => void) | null = null;
+  let unsubscribeSurveys: (() => void) | null = null;
+
+  try {
+    unsubscribeInquiries = subscribeToInquiriesCloud((inquiries, newArrival) => {
+      if (isCleanedUp) return;
+      if (newArrival && !knownInquiryIds.has(newArrival.id)) {
+        handleNewInquiry(newArrival);
+      }
+      inquiries.forEach((inq) => {
+        if (!knownInquiryIds.has(inq.id)) {
+          handleNewInquiry(inq, true);
+        } else {
+          handleUpdateInquiry(inq);
+        }
+      });
+    });
+
+    unsubscribeSurveys = subscribeToSurveysCloud((surveys, newArrival) => {
+      if (isCleanedUp) return;
+      if (newArrival && !knownSurveyIds.has(newArrival.id)) {
+        handleNewSurvey(newArrival);
+      }
+      surveys.forEach((s) => {
+        if (!knownSurveyIds.has(s.id)) {
+          handleNewSurvey(s, true);
+        } else {
+          handleUpdateSurvey(s);
+        }
+      });
+    });
+  } catch (cloudErr) {
+    console.warn('Cloud sync listeners init error:', cloudErr);
+  }
+
+  // 6. Connect Server SSE Stream (Second redundancy layer)
   function connectSSE() {
     if (isCleanedUp || typeof window === 'undefined') return;
 
@@ -341,7 +411,7 @@ export function initRealtimeSync(callbacks: RealtimeCallbacks): () => void {
 
   connectSSE();
 
-  // 6. Cross-Tab BroadcastChannel Listener
+  // 7. Cross-Tab BroadcastChannel Listener (Third redundancy layer)
   const handleBroadcastMessage = (e: MessageEvent) => {
     if (!e.data || typeof e.data !== 'object') return;
     const { type, data } = e.data;
@@ -360,7 +430,7 @@ export function initRealtimeSync(callbacks: RealtimeCallbacks): () => void {
     broadcastChannel.addEventListener('message', handleBroadcastMessage);
   }
 
-  // 7. Resilient Smart Background Polling (Guarantees fresh sync every 3.5s)
+  // 8. Resilient Smart Background Polling (Fourth redundancy layer every 3.5s)
   async function pollServerUpdates() {
     if (isCleanedUp) return;
 
@@ -371,10 +441,12 @@ export function initRealtimeSync(callbacks: RealtimeCallbacks): () => void {
         const json = await inqRes.json();
         if (json && Array.isArray(json.data)) {
           const incoming: BeneficiaryInquiry[] = json.data;
-          incoming.forEach(inq => {
+          incoming.forEach((inq) => {
             if (inq && inq.id) {
               if (!knownInquiryIds.has(inq.id)) {
                 handleNewInquiry(inq);
+              } else {
+                handleUpdateInquiry(inq);
               }
             }
           });
@@ -389,10 +461,12 @@ export function initRealtimeSync(callbacks: RealtimeCallbacks): () => void {
         const json = await survRes.json();
         if (json && Array.isArray(json.data)) {
           const incoming: SurveyResponse[] = json.data;
-          incoming.forEach(s => {
+          incoming.forEach((s) => {
             if (s && s.id) {
               if (!knownSurveyIds.has(s.id)) {
                 handleNewSurvey(s);
+              } else {
+                handleUpdateSurvey(s);
               }
             }
           });
@@ -401,16 +475,17 @@ export function initRealtimeSync(callbacks: RealtimeCallbacks): () => void {
     } catch (_) {}
   }
 
-  // Run initial poll after 1s, then every 3.5 seconds
   const initialPollTimer = setTimeout(pollServerUpdates, 1000);
   pollingInterval = setInterval(pollServerUpdates, 3500);
 
-  // Return Cleanup Function
+  // Return Master Cleanup Function
   return () => {
     isCleanedUp = true;
     clearTimeout(initialPollTimer);
     clearTimeout(reconnectTimeout);
     clearInterval(pollingInterval);
+    if (unsubscribeInquiries) unsubscribeInquiries();
+    if (unsubscribeSurveys) unsubscribeSurveys();
     if (eventSource) {
       eventSource.close();
       eventSource = null;

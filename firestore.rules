@@ -1,0 +1,46 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidId(docId) {
+      return docId is string && docId.size() > 0 && docId.size() <= 128;
+    }
+
+    match /surveys/{surveyId} {
+      allow read: if true;
+      allow create: if isValidId(surveyId) 
+        && request.resource.data.beneficiaryName is string
+        && request.resource.data.beneficiaryName.size() > 0;
+      allow update: if isValidId(surveyId);
+      allow delete: if false;
+    }
+
+    match /inquiries/{inquiryId} {
+      allow read: if true;
+      allow create: if isValidId(inquiryId) 
+        && request.resource.data.senderName is string
+        && request.resource.data.senderName.size() > 0
+        && request.resource.data.inquiryText is string
+        && request.resource.data.inquiryText.size() > 0;
+      allow update: if isValidId(inquiryId);
+      allow delete: if false;
+    }
+
+    match /principal_reports/{reportId} {
+      allow read: if true;
+      allow create, update: if isValidId(reportId)
+        && request.resource.data.schoolName is string;
+      allow delete: if false;
+    }
+
+    match /schools/{schoolId} {
+      allow read: if true;
+      allow write: if isValidId(schoolId);
+    }
+
+    match /system_config/{configId} {
+      allow read: if true;
+      allow write: if isValidId(configId);
+    }
+  }
+}

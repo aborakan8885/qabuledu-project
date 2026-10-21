@@ -1,0 +1,114 @@
+{
+  "inquiries": [
+    {
+      "id": "inq-1792556219144",
+      "senderName": "فحص نهائي بعد المزامنة",
+      "senderPhone": "0501112233",
+      "inquiryText": "تجربة وصول الاستفسار عبر الخادم وقاعدة البيانات السحابية",
+      "createdAt": "2026-10-21T04:16:59.144Z",
+      "status": "new"
+    },
+    {
+      "id": "inq-1792555719296",
+      "senderName": "اختبار فحص الخادم",
+      "senderPhone": "0500000000",
+      "inquiryText": "فحص الاستقبال من جهاز آخر",
+      "createdAt": "2026-10-21T04:08:39.296Z",
+      "status": "new"
+    },
+    {
+      "id": "inq-1792305184729",
+      "senderName": "أحمد الحربي",
+      "senderPhone": "0555555555",
+      "inquiryText": "استفسار تجريبي للتأكد من المزامنة الفورية اللحظية دون تحديث للصفحة",
+      "createdAt": "2026-10-18T06:33:04.729Z",
+      "status": "answered",
+      "answeredByOfficerId": "emp_101",
+      "answeredByOfficerName": "سالم محمد الترجمي",
+      "officerReply": "أهلاً بك، تم فحص استفسارك والرد عليه فورياً بنجاح.",
+      "answeredAt": "2026-10-18T06:33:00.000Z"
+    },
+    {
+      "senderName": "فيصل محمد",
+      "senderPhone": "0521365897",
+      "inquiryText": "لماذا",
+      "id": "inq-1791639125250",
+      "createdAt": "2026-10-10T13:32:05.250Z",
+      "status": "new"
+    },
+    {
+      "senderName": "ماجد محمد",
+      "senderPhone": "1254365213",
+      "inquiryText": "مت يبدأ التسجيل",
+      "id": "inq-1791638872465",
+      "createdAt": "2026-10-10T13:27:52.465Z",
+      "status": "new"
+    },
+    {
+      "id": "inq-101",
+      "senderName": "عبدالله بن سعد الحربي",
+      "senderPhone": "0554433221",
+      "inquiryText": "السلام عليكم، أود الاستفسار عن إمكانية نقل ابني في الصف الثالث الابتدائي إلى مدرسة قريبة من حي العزيزية، وهل الشواغر متاحة حالياً؟",
+      "createdAt": "2026-10-10T09:28:39.618Z",
+      "status": "answered",
+      "answeredByOfficerId": "emp_followup",
+      "answeredByOfficerName": "عبدالرحيم الأحمدي (مشرف القبول والتسجيل)",
+      "officerReply": "وعليكم السلام ورحمة الله وبركاته. مرحباً بك أخي الكريم، نعم تم التحقق من المدارس المجاورة بحي العزيزية وتوجد شواغر متاحة بمدرسة ابن كثير الابتدائية، يمكنك تقديم طلب النقل وسيتم التسكين مباشرة بإذن الله.",
+      "answeredAt": "2026-10-10T12:28:39.618Z",
+      "beneficiaryRating": 5,
+      "beneficiaryFeedbackNotes": "خدمة ممتازة وسريعة جداً، شكراً جزيلاً للأستاذ عبدالرحيم الأحمدي على تجاوبه السريع والوافي.",
+      "ratedAt": "2026-10-10T13:28:39.618Z"
+    },
+    {
+      "id": "inq-102",
+      "senderName": "فاطمة بنت أحمد الزهراني",
+      "senderPhone": "0501239874",
+      "inquiryText": "أرغب بالاستفسار عن موعد انتهاء فترة معادلة الشهادات الصادرة من خارج المملكة للمرحلة المتوسطة، وما هي المستندات المطلوبة مسبقاً؟",
+      "createdAt": "2026-10-10T11:58:39.618Z",
+      "status": "new"
+    }
+  ],
+  "surveys": [
+    {
+      "beneficiaryName": "طالب فحص المزامنة السحابية",
+      "phoneNumber": "0509998877",
+      "problemType": "vacancies_unavailable",
+      "schoolName": "مدرسة الملك عبدالعزيز",
+      "id": "SURV-192",
+      "createdAt": "2026-10-21T04:17:03.779Z",
+      "lastUpdatedAt": "2026-10-21T04:17:03.779Z",
+      "isSynced": true
+    },
+    {
+      "beneficiaryName": "طالب تجريبي",
+      "phoneNumber": "0512345678",
+      "problemType": "vacancies_unavailable",
+      "id": "SURV-747",
+      "createdAt": "2026-10-21T04:09:58.468Z",
+      "lastUpdatedAt": "2026-10-21T04:09:58.468Z",
+      "isSynced": true
+    },
+    {
+      "beneficiaryName": "خالد بن صالح الحربي",
+      "nationalId": "1098765432",
+      "surveyType": "admission",
+      "currentSchool": "مدرسة طيبة الابتدائية",
+      "status": "pending",
+      "id": "SURV-562",
+      "createdAt": "2026-10-18T06:33:18.016Z",
+      "lastUpdatedAt": "2026-10-18T06:33:18.016Z",
+      "isSynced": true
+    }
+  ],
+  "principalReports": [],
+  "config": {
+    "adminEmails": "qabulmadinah@gmail.com, admin@edu.gov.sa",
+    "autoBackupEnabled": true,
+    "backupInterval": 60,
+    "encryptionEnabled": true,
+    "thirdPartyIntegrationEnabled": true,
+    "institutionNameAr": "وزارة التعليم - إدارة رعاية المستفيدين بالمدينة المنورة",
+    "institutionNameEn": "Ministry of Education - Beneficiary Care Dept (Madinah)"
+  },
+  "lastSyncedAt": "2026-10-21T04:17:03.779Z"
+}

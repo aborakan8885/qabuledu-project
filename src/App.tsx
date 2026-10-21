@@ -43,6 +43,11 @@ import {
   fetchServerSyncedData
 } from './utils/storageEngine';
 import {
+  fetchAllSurveysFromCloud,
+  fetchAllInquiriesFromCloud,
+  fetchAllPrincipalReportsFromCloud
+} from './utils/cloudSync';
+import {
   INITIAL_CONFIG,
   INITIAL_SURVEYS,
   INITIAL_EMAIL_LOGS,
@@ -471,15 +476,20 @@ export default function App() {
       loadSurveysFromStorage(),
       loadPrincipalReportsFromStorage(),
       loadSchoolsFromStorage(),
+      fetchAllSurveysFromCloud(),
+      fetchAllInquiriesFromCloud(),
+      fetchAllPrincipalReportsFromCloud(),
       fetchServerSyncedData()
-    ]).then(([surveysData, reportsData, schoolsData, serverData]) => {
-      // 1. Surveys: Merge local + server data strictly without dropping any transactions
+    ]).then(([surveysData, reportsData, schoolsData, cloudSurveys, cloudInquiries, cloudReports, serverData]) => {
+      // 1. Surveys: Merge local + cloud Firestore + server data strictly without dropping any transactions
       setSurveys(prev => {
         const merged = new Map<string, SurveyResponse>();
         // Add existing state
         prev.forEach(s => { if (s && s.id) merged.set(s.id, s); });
         // Merge IndexedDB data
         (surveysData || []).forEach(s => { if (s && s.id) merged.set(s.id, s); });
+        // Merge Cloud Firestore data (authoritative cross-device source)
+        (cloudSurveys || []).forEach(s => { if (s && s.id) merged.set(s.id, s); });
         // Merge Server synced data
         if (serverData?.surveys && Array.isArray(serverData.surveys)) {
           serverData.surveys.forEach((s: SurveyResponse) => { if (s && s.id) merged.set(s.id, s); });
@@ -487,18 +497,18 @@ export default function App() {
         return Array.from(merged.values());
       });
 
-      // 2. Principal Reports: Merge local + server
+      // 2. Principal Reports: Merge local + cloud + server
       setPrincipalReports(prev => {
         const merged = new Map<string, PrincipalReport>();
         prev.forEach(r => { if (r && r.id) merged.set(r.id, r); });
         (reportsData || []).forEach(r => { if (r && r.id) merged.set(r.id, r); });
+        (cloudReports || []).forEach(r => { if (r && r.id) merged.set(r.id, r); });
         if (serverData?.principalReports && Array.isArray(serverData.principalReports)) {
           serverData.principalReports.forEach((r: PrincipalReport) => { if (r && r.id) merged.set(r.id, r); });
         }
         return Array.from(merged.values());
       });
 
-      // 3. Schools & Principals: Strict protection of uploaded records
       // 3. Schools & Principals: Strict protection of authentic 2940 records
       const schMap = new Map<string, SchoolItem>();
       // Always seed with INITIAL_SCHOOLS (master 2940 schools)
@@ -527,15 +537,16 @@ export default function App() {
       const resolvedSchools = Array.from(schMap.values());
       setSchoolsList(resolvedSchools);
 
-      // 4. Inquiries: Merge server inquiries if available
-      if (serverData?.inquiries && Array.isArray(serverData.inquiries) && serverData.inquiries.length > 0) {
-        setInquiries(prev => {
-          const inqMap = new Map<string, BeneficiaryInquiry>();
-          prev.forEach(i => { if (i && i.id) inqMap.set(i.id, i); });
+      // 4. Inquiries: Merge local + cloud Firestore + server inquiries
+      setInquiries(prev => {
+        const inqMap = new Map<string, BeneficiaryInquiry>();
+        prev.forEach(i => { if (i && i.id) inqMap.set(i.id, i); });
+        (cloudInquiries || []).forEach(i => { if (i && i.id) inqMap.set(i.id, i); });
+        if (serverData?.inquiries && Array.isArray(serverData.inquiries)) {
           serverData.inquiries.forEach((i: BeneficiaryInquiry) => { if (i && i.id) inqMap.set(i.id, i); });
-          return Array.from(inqMap.values());
-        });
-      }
+        }
+        return Array.from(inqMap.values());
+      });
 
       // 5. Config: Merge custom settings if available on server
       if (serverData?.config && typeof serverData.config === 'object') {

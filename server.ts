@@ -254,37 +254,77 @@ async function startServer() {
     });
   });
 
-  // Storage helper functions ensuring atomic, safe writes and anti-downgrade retention
+  const LIVE_REQUESTS_FILE = path.join(DATA_DIR, "live_requests_and_inquiries.json");
+
+  // In-memory cache for ultra-fast response times
+  let memoryCache: any = null;
+
   function getSafeServerStorage(): any {
+    if (memoryCache && Array.isArray(memoryCache.inquiries) && Array.isArray(memoryCache.surveys)) {
+      return memoryCache;
+    }
+
     let existingData: any = {};
-    if (fs.existsSync(STORAGE_FILE)) {
+    if (fs.existsSync(LIVE_REQUESTS_FILE)) {
+      try {
+        existingData = JSON.parse(fs.readFileSync(LIVE_REQUESTS_FILE, "utf-8"));
+      } catch {
+        existingData = {};
+      }
+    } else if (fs.existsSync(STORAGE_FILE)) {
       try {
         existingData = JSON.parse(fs.readFileSync(STORAGE_FILE, "utf-8"));
       } catch {
         existingData = {};
       }
     }
-    if ((!existingData.schools || existingData.schools.length < 2940) && fs.existsSync(MASTER_PROTECTED_FILE)) {
+
+    if (fs.existsSync(MASTER_PROTECTED_FILE)) {
       try {
         const master = JSON.parse(fs.readFileSync(MASTER_PROTECTED_FILE, "utf-8"));
-        if (Array.isArray(master.schools)) existingData.schools = master.schools;
-        if (Array.isArray(master.officers)) existingData.officers = master.officers;
+        if (!existingData.schools || existingData.schools.length < 2940) {
+          existingData.schools = master.schools || [];
+        }
+        if (!existingData.officers || existingData.officers.length < 10) {
+          existingData.officers = master.officers || [];
+        }
       } catch {}
     }
+
     if (!Array.isArray(existingData.inquiries)) existingData.inquiries = [];
     if (!Array.isArray(existingData.surveys)) existingData.surveys = [];
+    if (!Array.isArray(existingData.principalReports)) existingData.principalReports = [];
     if (!Array.isArray(existingData.officers)) existingData.officers = [];
+    if (!Array.isArray(existingData.schools)) existingData.schools = [];
+
+    memoryCache = existingData;
     return existingData;
   }
 
   function saveSafeServerStorage(data: any): boolean {
     try {
-      const tempFile = `${STORAGE_FILE}.tmp.${Date.now()}`;
-      fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), "utf-8");
-      fs.renameSync(tempFile, STORAGE_FILE);
-      if (Array.isArray(data.schools) && data.schools.length >= 2940) {
-        fs.writeFileSync(MASTER_PROTECTED_FILE, JSON.stringify(data, null, 2), "utf-8");
-      }
+      memoryCache = data;
+      // 1. Fast atomic write of live dynamic requests & inquiries (< 1ms)
+      const dynamicPayload = {
+        inquiries: data.inquiries || [],
+        surveys: data.surveys || [],
+        principalReports: data.principalReports || [],
+        config: data.config || {},
+        lastSyncedAt: new Date().toISOString()
+      };
+      const tempRequests = `${LIVE_REQUESTS_FILE}.tmp.${Date.now()}`;
+      fs.writeFileSync(tempRequests, JSON.stringify(dynamicPayload, null, 2), "utf-8");
+      fs.renameSync(tempRequests, LIVE_REQUESTS_FILE);
+
+      // 2. Asynchronously / Debounced write full storage file without blocking
+      setTimeout(() => {
+        try {
+          const tempFile = `${STORAGE_FILE}.tmp.${Date.now()}`;
+          fs.writeFileSync(tempFile, JSON.stringify(data), "utf-8");
+          fs.renameSync(tempFile, STORAGE_FILE);
+        } catch (_) {}
+      }, 50);
+
       return true;
     } catch (e) {
       console.error("Save safe storage failed:", e);
