@@ -1051,6 +1051,105 @@ async function startServer() {
     return res.status(404).send("Source code file not found");
   });
 
+  // Dedicated Endpoint: Raw Code for instant in-browser select-all & copy
+  app.get(["/raw-code", "/code.txt"], (req, res) => {
+    const codeFilePath = path.join(process.cwd(), "PROJECT_COMPLETE_SOURCE_CODE.txt");
+    if (fs.existsSync(codeFilePath)) {
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      return res.sendFile(codeFilePath);
+    }
+    return res.status(404).send("Source code file not found");
+  });
+
+  // Dedicated Endpoint: 1-Click Copy & View Full Codebase Web Page
+  app.get(["/view-code", "/code", "/full-code"], (req, res) => {
+    const codeFilePath = path.join(process.cwd(), "PROJECT_COMPLETE_SOURCE_CODE.txt");
+    if (!fs.existsSync(codeFilePath)) {
+      return res.status(404).send("Source code file not found");
+    }
+    const codeContent = fs.readFileSync(codeFilePath, "utf-8");
+    const escaped = codeContent
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    const html = `<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>الكود البرمجي الكامل للمنصة - نسخ بضغطة واحدة</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0b1924; color: #e2e8f0; padding: 16px; }
+    .header { background: #132735; border: 1px solid #1e3a4f; border-radius: 16px; padding: 18px 24px; margin-bottom: 16px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; position: sticky; top: 12px; z-index: 50; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); }
+    .title-box h1 { font-size: 18px; font-weight: 800; color: #38bdf8; margin-bottom: 4px; }
+    .title-box p { font-size: 12px; color: #94a3b8; }
+    .actions { display: flex; gap: 10px; align-items: center; }
+    .btn { padding: 10px 18px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer; border: none; transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
+    .btn-copy { background: #059669; color: white; box-shadow: 0 4px 12px rgba(5,150,105,0.4); }
+    .btn-copy:hover { background: #10b981; transform: translateY(-1px); }
+    .btn-download { background: #0284c7; color: white; }
+    .btn-download:hover { background: #38bdf8; }
+    .btn-raw { background: #334155; color: #e2e8f0; }
+    .btn-raw:hover { background: #475569; }
+    .toast { display: none; background: #10b981; color: white; padding: 8px 16px; border-radius: 8px; font-weight: 700; font-size: 13px; animation: fadeIn 0.3s; }
+    .editor-box { position: relative; border-radius: 14px; overflow: hidden; border: 1px solid #1e3a4f; background: #07111a; }
+    textarea { width: 100%; height: calc(100vh - 150px); min-height: 600px; background: #07111a; color: #94a3b8; font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; line-height: 1.6; padding: 20px; border: none; outline: none; resize: none; direction: ltr; white-space: pre; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title-box">
+      <h1>منظومة خدمات المستفيد والقبول والتسجيل - الكود المصدري الكامل</h1>
+      <p>52 ملفاً برمجياً كاملاً • 32,870 سطراً • الحجم: 1.75 ميغابايت</p>
+    </div>
+    <div class="actions">
+      <span id="toast" class="toast">✓ تم نسخ كامل الكود للحافظة!</span>
+      <button id="copyBtn" class="btn btn-copy" onclick="copyAllCode()">📋 نسخ الكود كاملاً بضغطة واحدة</button>
+      <a href="/api/download-source-code" class="btn btn-download">⬇️ تحميل ملف TXT</a>
+      <a href="/raw-code" target="_blank" class="btn btn-raw">📄 فتح كنص خام (Raw)</a>
+    </div>
+  </div>
+
+  <div class="editor-box">
+    <textarea id="codeArea" readonly>${escaped}</textarea>
+  </div>
+
+  <script>
+    async function copyAllCode() {
+      const area = document.getElementById('codeArea');
+      const btn = document.getElementById('copyBtn');
+      const toast = document.getElementById('toast');
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(area.value);
+        } else {
+          area.select();
+          document.execCommand('copy');
+        }
+        btn.innerText = '✓ تم النسخ بنجاح!';
+        btn.style.background = '#047857';
+        toast.style.display = 'inline-block';
+        setTimeout(() => {
+          btn.innerText = '📋 نسخ الكود كاملاً بضغطة واحدة';
+          btn.style.background = '#059669';
+          toast.style.display = 'none';
+        }, 4000);
+      } catch (e) {
+        area.select();
+        document.execCommand('copy');
+        alert('تم تحديد كامل الكود، اضغط Ctrl+C أو نسخ الآن.');
+      }
+    }
+  </script>
+</body>
+</html>`;
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.send(html);
+  });
+
   // Secure Cookie Check Route
   app.get("/__cookie_check.html", (_req, res) => {
     const cookieCheckPath = path.join(process.cwd(), "public", "__cookie_check.html");

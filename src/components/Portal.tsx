@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { verifyCivilIdMatch, extractCivilIdFromSchool, cleanDigitsString, findSchoolsByPrincipalCivilId, extractPrincipalInfoFromSchool, extractSchoolNameFromSchool, formatPrincipalName, formatPrincipalGreeting } from '../utils/civilId';
 import { AgeVerificationModal } from './AgeVerificationModal';
+import { loginWithEmailAndPassword, getUserRole } from '../firebase';
 import { 
   Map,
   Users, 
@@ -146,26 +147,6 @@ export default function Portal({
   const [showProtectedPasscode, setShowProtectedPasscode] = useState<boolean>(false);
 
   const handleOpenProtectedCard = (target: 'map' | 'parent' | 'principal') => {
-    setProtectedModalTarget(target);
-    setProtectedPasscode('');
-    setProtectedPasscodeError('');
-    setShowProtectedPasscode(false);
-  };
-
-  const handleVerifyProtectedPasscode = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (protectedPasscode.trim().toLowerCase() !== 'salim1392') {
-      setProtectedPasscodeError(
-        isRtl ? 'رمز الدخول غير صحيح! الدخول متاح للأدمن فقط.' : 'Invalid passcode! Access restricted to Admin only.'
-      );
-      return;
-    }
-
-    const target = protectedModalTarget;
-    setProtectedModalTarget(null);
-    setProtectedPasscode('');
-    setProtectedPasscodeError('');
-
     if (target === 'map') {
       window.open('https://mapedumadinah.com/', '_blank', 'noopener,noreferrer');
     } else if (target === 'parent') {
@@ -179,6 +160,10 @@ export default function Portal({
         setLoginError('');
       }
     }
+  };
+
+  const handleVerifyProtectedPasscode = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
   };
 
   // Helper for safe translation
@@ -1102,14 +1087,7 @@ export default function Portal({
               {/* Card 4: Department Staff (منسوبي الإدارة) */}
               <motion.div
                 onClick={() => {
-                  const sess = getPersistedOfficerSession();
-                  if (sess.isAuthenticated) {
-                    onSelectRole('admin');
-                  } else {
-                    setView('admin-login');
-                    setAdminAuthMode('login');
-                    setLoginError('');
-                  }
+                  onSelectRole('admin');
                 }}
                 className={`group relative rounded-2xl portal-card-padding cursor-pointer transition-colors duration-150 flex flex-col justify-between overflow-hidden shadow-sm border h-full ${
                   isDark
@@ -1313,61 +1291,31 @@ export default function Portal({
                         return;
                       }
 
-                      // 1. Guaranteed Super Admin Login Check (سالم محمد الترجمي - السجل المدني: 1068575628 أو الجوال: 0553512200)
-                      if ((nationalId === '1068575628' || nationalId === '0553512200' || nationalId.toLowerCase() === 'admin') && password === 'salim123321rs&1') {
-                        setLoginError('');
-                        persistOfficerSession('emp_1');
-                        localStorage.setItem('admin_api_key', 'salim_admin_key_2026');
-                        if (rememberMeAdmin) {
-                          await storeBrowserCredential({
-                            username: nationalId,
-                            password: password,
-                            displayName: 'سالم محمد الترجمي',
-                            role: 'officer'
-                          });
-                        }
-                        onSelectRole('admin');
-                        return;
-                      }
-
-                      // 2. Check Officer Users in localStorage (v4/v3)
+                      // Authenticate via Firebase Authentication
                       try {
-                        const officersRaw = localStorage.getItem('officer_users_v4') || localStorage.getItem('officer_users_v3');
-                        if (officersRaw) {
-                          const officersList = JSON.parse(officersRaw);
-                          if (Array.isArray(officersList)) {
-                            const matchedOfficer = officersList.find((o: any) => {
-                              const oNat = (o.nationalId || '').toString().trim();
-                              const oUser = (o.id || '').toString().trim().toLowerCase();
-                              const oMob = (o.mobile || '').toString().trim();
-                              const oPass = (o.password || '').toString().trim();
-                              return (oNat === nationalId || oUser === nationalId.toLowerCase() || oMob === nationalId) &&
-                                     (oPass === password || (oNat === '1068575628' && password === 'salim123321rs&1'));
+                        const emailToUse = nationalId.includes('@') ? nationalId : `${nationalId}@moe.gov.sa`;
+                        const user = await loginWithEmailAndPassword(emailToUse, password);
+                        const role = await getUserRole(user.uid);
+                        if (role === 'admin' || role === 'officer') {
+                          setLoginError('');
+                          persistOfficerSession(user.uid);
+                          if (rememberMeAdmin) {
+                            await storeBrowserCredential({
+                              username: nationalId,
+                              password: password,
+                              displayName: user.displayName || 'مسؤول قبول معتمد',
+                              role: 'officer'
                             });
-                            if (matchedOfficer) {
-                              setLoginError('');
-                              const offId = matchedOfficer.id || 'emp_1';
-                              persistOfficerSession(offId);
-                              if (matchedOfficer.nationalId === '1068575628' || matchedOfficer.id === 'emp_1') {
-                                localStorage.setItem('admin_api_key', 'salim_admin_key_2026');
-                              } else {
-                                localStorage.removeItem('admin_api_key');
-                              }
-                              if (rememberMeAdmin) {
-                                await storeBrowserCredential({
-                                  username: nationalId,
-                                  password: password,
-                                  displayName: matchedOfficer.name || 'منسوب إدارة',
-                                  role: 'officer'
-                                });
-                              }
-                              onSelectRole('admin');
-                              return;
-                            }
                           }
+                          onSelectRole('admin');
+                          return;
+                        } else {
+                          setLoginError(isRtl ? 'عذراً، هذا الحساب غير مصرح له كمسؤول قبول في قاعدة البيانات.' : 'Unauthorized: Not an officer.');
+                          return;
                         }
-                      } catch (err) {
-                        console.error('Officer list parsing error', err);
+                      } catch (firebaseErr: any) {
+                        setLoginError(isRtl ? 'بيانات الدخول غير صحيحة أو غير مسجلة في نظام المصادقة السحابي.' : 'Invalid email or password.');
+                        return;
                       }
 
                       // 3. Check Registered Admins in localStorage

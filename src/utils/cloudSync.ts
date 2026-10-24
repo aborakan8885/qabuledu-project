@@ -1,7 +1,7 @@
 /**
  * Central Cloud Persistence & Realtime Synchronization Engine
- * Powered by Firebase Firestore with automatic offline resilience and local fallback.
- * Ensures data is 100% persistent across devices, deployments, and restarts.
+ * Powered by Firebase Firestore and Firebase Authentication.
+ * Pure direct client-to-cloud connection with strict zero-trust ABAC rules.
  */
 
 import {
@@ -11,12 +11,11 @@ import {
   updateDoc,
   getDocs,
   onSnapshot,
+  serverTimestamp,
   query,
-  orderBy,
-  limit,
-  serverTimestamp
+  where
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, auth, ensureAnonymousAuth } from '../firebase';
 import { SurveyResponse, BeneficiaryInquiry, PrincipalReport } from '../types';
 
 const COLLECTION_SURVEYS = 'surveys';
@@ -42,15 +41,22 @@ function sanitizeForFirestore<T extends Record<string, any>>(obj: T): Record<str
 
 export async function saveInquiryToCloud(inquiry: BeneficiaryInquiry): Promise<boolean> {
   try {
+    await ensureAnonymousAuth();
+    if (!auth.currentUser) {
+      console.warn("❌ [Firestore Error]: No authenticated user found. Cannot save inquiry.");
+      return false;
+    }
+
     const clean = sanitizeForFirestore({
       ...inquiry,
+      beneficiaryUid: auth.currentUser.uid,
       updatedAtServer: serverTimestamp()
     });
     const docRef = doc(db, COLLECTION_INQUIRIES, inquiry.id);
     await setDoc(docRef, clean, { merge: true });
     return true;
-  } catch (err) {
-    console.warn('Firestore saveInquiry failed, falling back to server/local:', err);
+  } catch (err: any) {
+    console.warn("❌ [Firestore Error]:", err?.message, err);
     return false;
   }
 }
@@ -60,6 +66,12 @@ export async function updateInquiryInCloud(
   updates: Partial<BeneficiaryInquiry>
 ): Promise<boolean> {
   try {
+    await ensureAnonymousAuth();
+    if (!auth.currentUser) {
+      console.warn("❌ [Firestore Error]: No authenticated user found. Cannot update inquiry.");
+      return false;
+    }
+
     const clean = sanitizeForFirestore({
       ...updates,
       updatedAtServer: serverTimestamp()
@@ -67,24 +79,33 @@ export async function updateInquiryInCloud(
     const docRef = doc(db, COLLECTION_INQUIRIES, inquiryId);
     await updateDoc(docRef, clean);
     return true;
-  } catch (err) {
-    console.warn('Firestore updateInquiry failed:', err);
+  } catch (err: any) {
+    console.warn("❌ [Firestore Error]:", err?.message, err);
     return false;
   }
 }
 
 export async function fetchAllInquiriesFromCloud(): Promise<BeneficiaryInquiry[]> {
   try {
-    const colRef = collection(db, COLLECTION_INQUIRIES);
-    const snap = await getDocs(colRef);
+    await ensureAnonymousAuth();
+    if (!auth.currentUser) {
+      return [];
+    }
+
+    // Role-tailored query: Anonymous beneficiary gets only their inquiries; staff/admin gets all
+    const baseCol = collection(db, COLLECTION_INQUIRIES);
+    const q = auth.currentUser.isAnonymous
+      ? query(baseCol, where('beneficiaryUid', '==', auth.currentUser.uid))
+      : baseCol;
+
+    const snap = await getDocs(q);
     const list: BeneficiaryInquiry[] = [];
     snap.forEach((d) => {
       list.push(d.data() as BeneficiaryInquiry);
     });
-    // Sort descending by createdAt
     return list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-  } catch (err) {
-    console.warn('Failed to fetch inquiries from Firestore:', err);
+  } catch (err: any) {
+    console.warn("❌ [Firestore Error]:", err?.message, err);
     return [];
   }
 }
@@ -93,9 +114,18 @@ export function subscribeToInquiriesCloud(
   onUpdate: (inquiries: BeneficiaryInquiry[], newArrival?: BeneficiaryInquiry) => void
 ): () => void {
   try {
-    const colRef = collection(db, COLLECTION_INQUIRIES);
+    if (!auth.currentUser) {
+      return () => {};
+    }
+
+    // Role-tailored query: Anonymous beneficiary listens only to their own inquiries; staff/admin listens to all
+    const baseCol = collection(db, COLLECTION_INQUIRIES);
+    const q = auth.currentUser.isAnonymous
+      ? query(baseCol, where('beneficiaryUid', '==', auth.currentUser.uid))
+      : baseCol;
+
     return onSnapshot(
-      colRef,
+      q,
       (snapshot) => {
         const list: BeneficiaryInquiry[] = [];
         let newestItem: BeneficiaryInquiry | undefined;
@@ -117,11 +147,11 @@ export function subscribeToInquiriesCloud(
         onUpdate(list, newestItem);
       },
       (error) => {
-        console.warn('Inquiries Firestore onSnapshot error:', error);
+        console.warn("❌ [Firestore Error]:", error?.message, error);
       }
     );
-  } catch (err) {
-    console.warn('subscribeToInquiriesCloud error:', err);
+  } catch (err: any) {
+    console.warn("❌ [Firestore Error]:", err?.message, err);
     return () => {};
   }
 }
@@ -132,15 +162,22 @@ export function subscribeToInquiriesCloud(
 
 export async function saveSurveyToCloud(survey: SurveyResponse): Promise<boolean> {
   try {
+    await ensureAnonymousAuth();
+    if (!auth.currentUser) {
+      console.warn("❌ [Firestore Error]: No authenticated user found. Cannot save survey.");
+      return false;
+    }
+
     const clean = sanitizeForFirestore({
       ...survey,
+      beneficiaryUid: auth.currentUser.uid,
       updatedAtServer: serverTimestamp()
     });
     const docRef = doc(db, COLLECTION_SURVEYS, survey.id);
     await setDoc(docRef, clean, { merge: true });
     return true;
-  } catch (err) {
-    console.warn('Firestore saveSurvey failed, falling back to server/local:', err);
+  } catch (err: any) {
+    console.warn("❌ [Firestore Error]:", err?.message, err);
     return false;
   }
 }
@@ -150,6 +187,12 @@ export async function updateSurveyInCloud(
   updates: Partial<SurveyResponse>
 ): Promise<boolean> {
   try {
+    await ensureAnonymousAuth();
+    if (!auth.currentUser) {
+      console.warn("❌ [Firestore Error]: No authenticated user found. Cannot update survey.");
+      return false;
+    }
+
     const clean = sanitizeForFirestore({
       ...updates,
       updatedAtServer: serverTimestamp()
@@ -157,23 +200,33 @@ export async function updateSurveyInCloud(
     const docRef = doc(db, COLLECTION_SURVEYS, surveyId);
     await updateDoc(docRef, clean);
     return true;
-  } catch (err) {
-    console.warn('Firestore updateSurvey failed:', err);
+  } catch (err: any) {
+    console.warn("❌ [Firestore Error]:", err?.message, err);
     return false;
   }
 }
 
 export async function fetchAllSurveysFromCloud(): Promise<SurveyResponse[]> {
   try {
-    const colRef = collection(db, COLLECTION_SURVEYS);
-    const snap = await getDocs(colRef);
+    await ensureAnonymousAuth();
+    if (!auth.currentUser) {
+      return [];
+    }
+
+    // Role-tailored query: Anonymous beneficiary gets only their surveys; staff/admin gets all
+    const baseCol = collection(db, COLLECTION_SURVEYS);
+    const q = auth.currentUser.isAnonymous
+      ? query(baseCol, where('beneficiaryUid', '==', auth.currentUser.uid))
+      : baseCol;
+
+    const snap = await getDocs(q);
     const list: SurveyResponse[] = [];
     snap.forEach((d) => {
       list.push(d.data() as SurveyResponse);
     });
     return list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-  } catch (err) {
-    console.warn('Failed to fetch surveys from Firestore:', err);
+  } catch (err: any) {
+    console.warn("❌ [Firestore Error]:", err?.message, err);
     return [];
   }
 }
@@ -182,9 +235,18 @@ export function subscribeToSurveysCloud(
   onUpdate: (surveys: SurveyResponse[], newArrival?: SurveyResponse) => void
 ): () => void {
   try {
-    const colRef = collection(db, COLLECTION_SURVEYS);
+    if (!auth.currentUser) {
+      return () => {};
+    }
+
+    // Role-tailored query: Anonymous beneficiary listens only to their own surveys; staff/admin listens to all
+    const baseCol = collection(db, COLLECTION_SURVEYS);
+    const q = auth.currentUser.isAnonymous
+      ? query(baseCol, where('beneficiaryUid', '==', auth.currentUser.uid))
+      : baseCol;
+
     return onSnapshot(
-      colRef,
+      q,
       (snapshot) => {
         const list: SurveyResponse[] = [];
         let newestItem: SurveyResponse | undefined;
@@ -206,11 +268,11 @@ export function subscribeToSurveysCloud(
         onUpdate(list, newestItem);
       },
       (error) => {
-        console.warn('Surveys Firestore onSnapshot error:', error);
+        console.warn("❌ [Firestore Error]:", error?.message, error);
       }
     );
-  } catch (err) {
-    console.warn('subscribeToSurveysCloud error:', err);
+  } catch (err: any) {
+    console.warn("❌ [Firestore Error]:", err?.message, err);
     return () => {};
   }
 }
@@ -221,6 +283,12 @@ export function subscribeToSurveysCloud(
 
 export async function savePrincipalReportToCloud(report: PrincipalReport): Promise<boolean> {
   try {
+    await ensureAnonymousAuth();
+    if (!auth.currentUser) {
+      console.warn("❌ [Firestore Error]: No authenticated user found. Cannot save principal report.");
+      return false;
+    }
+
     const clean = sanitizeForFirestore({
       ...report,
       updatedAtServer: serverTimestamp()
@@ -228,14 +296,19 @@ export async function savePrincipalReportToCloud(report: PrincipalReport): Promi
     const docRef = doc(db, COLLECTION_REPORTS, report.id);
     await setDoc(docRef, clean, { merge: true });
     return true;
-  } catch (err) {
-    console.warn('Firestore savePrincipalReport failed:', err);
+  } catch (err: any) {
+    console.warn("❌ [Firestore Error]:", err?.message, err);
     return false;
   }
 }
 
 export async function fetchAllPrincipalReportsFromCloud(): Promise<PrincipalReport[]> {
   try {
+    await ensureAnonymousAuth();
+    if (!auth.currentUser) {
+      return [];
+    }
+
     const colRef = collection(db, COLLECTION_REPORTS);
     const snap = await getDocs(colRef);
     const list: PrincipalReport[] = [];
@@ -243,8 +316,8 @@ export async function fetchAllPrincipalReportsFromCloud(): Promise<PrincipalRepo
       list.push(d.data() as PrincipalReport);
     });
     return list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-  } catch (err) {
-    console.warn('Failed to fetch reports from Firestore:', err);
+  } catch (err: any) {
+    console.warn("❌ [Firestore Error]:", err?.message, err);
     return [];
   }
 }
@@ -253,6 +326,10 @@ export function subscribeToPrincipalReportsCloud(
   onUpdate: (reports: PrincipalReport[]) => void
 ): () => void {
   try {
+    if (!auth.currentUser) {
+      return () => {};
+    }
+
     const colRef = collection(db, COLLECTION_REPORTS);
     return onSnapshot(
       colRef,
@@ -265,11 +342,11 @@ export function subscribeToPrincipalReportsCloud(
         onUpdate(list);
       },
       (error) => {
-        console.warn('Principal reports onSnapshot error:', error);
+        console.warn("❌ [Firestore Error]:", error?.message, error);
       }
     );
-  } catch (err) {
-    console.warn('subscribeToPrincipalReportsCloud error:', err);
+  } catch (err: any) {
+    console.warn("❌ [Firestore Error]:", err?.message, err);
     return () => {};
   }
 }

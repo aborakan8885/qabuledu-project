@@ -9,6 +9,7 @@ export type RequestType = 'registration' | 'transfer' | 'equivalency';
 
 export interface SurveyResponse {
   id: string;
+  beneficiaryUid?: string;
   beneficiaryName: string;
   nationalId?: string;
   phoneNumber: string;
@@ -241,6 +242,23 @@ export interface PrincipalReport {
 
 export type OfficerRole = 'admin' | 'director' | 'supervisor' | 'school_planning' | 'school_leadership' | 'stage_supervisor' | 'returned_followup' | 'leadership_director' | 'equivalency_supervisor' | 'manager_admission_unit' | 'tech_support_supervisor' | 'equivalency_supervisor' | 'planning_vacancy_supervisor' | 'primary_school_supervisor' | 'intermediate_school_supervisor' | 'secondary_school_supervisor' | 'early_childhood_official' | 'kindergarten_official';
 
+export interface UserProfile {
+  uid: string;
+  civilId: string;
+  nationalId?: string;
+  nameAr?: string;
+  displayName?: string;
+  email?: string;
+  role: 'admin' | 'officer' | 'supervisor' | 'director' | string;
+  permissions?: UserPermissions | any;
+  workField?: string;
+  unit?: string;
+  mobile?: string;
+  createdAt?: string;
+  registeredAt?: string;
+  [key: string]: any;
+}
+
 export interface OfficerUser {
   id: string;
   nameAr: string;
@@ -260,6 +278,7 @@ export interface OfficerUser {
   assignedGender?: 'boys' | 'girls' | 'both' | string; // الجنس المسؤول عنه (بنين, بنات, الكل)
   assignedSector?: string; // القطاع المسؤول عنه (الشمال, الجنوب, الشرق, الغرب, الوسط, الكل)
   nationalId?: string; // رقم السجل المدني (المفتاح الرئيسي للتسجيل والدخول)
+  civilId?: string; // رقم السجل المدني
   personalEmail?: string; // البريد الإلكتروني الشخصي (وليس الرسمي)
   mustChangePassword?: boolean; // هل يجب تعيين كلمة مرور جديدة وتأكيدها عند أول دخول
   fullNameQuad?: string; // الاسم الرباعي للمستخدم
@@ -334,6 +353,7 @@ export interface SchoolItem {
 
 export interface BeneficiaryInquiry {
   id: string;
+  beneficiaryUid?: string;
   senderName: string; // اسم صاحب الاستفسار (مطلوب لمتابعة الاستفسار بالاسم)
   senderPhone?: string;
   inquiryText: string; // نص الاستفسار

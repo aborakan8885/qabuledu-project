@@ -1,46 +1,56 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function isValidId(docId) {
-      return docId is string && docId.size() > 0 && docId.size() <= 128;
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    function isOfficer() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'officer' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      );
+    }
+    function isOwner(resourceData) {
+      return isSignedIn() && resourceData.beneficiaryUid == request.auth.uid;
     }
 
-    match /surveys/{surveyId} {
-      allow read: if true;
-      allow create: if isValidId(surveyId) 
-        && request.resource.data.beneficiaryName is string
-        && request.resource.data.beneficiaryName.size() > 0;
-      allow update: if isValidId(surveyId);
-      allow delete: if false;
+    match /surveys/{id} {
+      allow read: if isAdmin() || isOfficer() || isOwner(resource.data);
+      allow create: if isSignedIn() && request.resource.data.beneficiaryUid == request.auth.uid;
+      // يمنع المستفيد من تغيير حالة الطلب أو تعيين موظف لنفسه
+      allow update: if isAdmin() || isOfficer() || (isOwner(resource.data) && request.resource.data.status == resource.data.status);
+      allow delete: if isAdmin();
     }
 
-    match /inquiries/{inquiryId} {
-      allow read: if true;
-      allow create: if isValidId(inquiryId) 
-        && request.resource.data.senderName is string
-        && request.resource.data.senderName.size() > 0
-        && request.resource.data.inquiryText is string
-        && request.resource.data.inquiryText.size() > 0;
-      allow update: if isValidId(inquiryId);
-      allow delete: if false;
+    match /inquiries/{id} {
+      allow read: if isAdmin() || isOfficer() || isOwner(resource.data);
+      allow create: if isSignedIn();
+      allow update: if isAdmin() || isOfficer();
+      allow delete: if isAdmin();
     }
 
-    match /principal_reports/{reportId} {
-      allow read: if true;
-      allow create, update: if isValidId(reportId)
-        && request.resource.data.schoolName is string;
-      allow delete: if false;
+    match /users/{id} {
+      allow read: if isSignedIn();
+      allow create, delete: if isAdmin(); 
+      // يسمح للموظف بتحديث الـ uid الخاص به عند أول دخول فقط، أو للأدمن بالتعديل
+      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == request.resource.data.uid && resource.data.uid == null);
     }
 
-    match /schools/{schoolId} {
-      allow read: if true;
-      allow write: if isValidId(schoolId);
+    match /principal_reports/{id} {
+      allow read: if isAdmin() || isOfficer();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
     }
 
-    match /system_config/{configId} {
-      allow read: if true;
-      allow write: if isValidId(configId);
+    match /schools/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /system_config/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
   }
 }

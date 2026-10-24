@@ -88,6 +88,8 @@ import {
   ProblemType,
   BeneficiaryFeedback,
   OfficerUser,
+  OfficerRole,
+  UserProfile,
   isSystemAdmin,
   ADMIN_CREDENTIALS
 } from '../types';
@@ -201,6 +203,7 @@ interface DashboardProps {
   onUpdateBeneficiaryFeedbacks?: (feedbacks: BeneficiaryFeedback[]) => void;
   inquiries?: BeneficiaryInquiry[];
   onUpdateInquiries?: (inquiries: BeneficiaryInquiry[]) => void;
+  userProfile?: UserProfile | null;
 }
 
 export default function Dashboard({
@@ -235,7 +238,8 @@ export default function Dashboard({
   beneficiaryFeedbacks = [],
   onUpdateBeneficiaryFeedbacks,
   inquiries = [],
-  onUpdateInquiries
+  onUpdateInquiries,
+  userProfile
 }: DashboardProps) {
   const isRtl = currentLang === 'ar';
   const isDark = theme === 'dark';
@@ -250,6 +254,25 @@ export default function Dashboard({
     } catch {}
     return DEMO_OFFICERS[0];
   });
+
+  // مزامنة الموظف النشط مع الملف الشخصي وصلاحيات قاعدة البيانات الفعلية
+  useEffect(() => {
+    if (userProfile) {
+      setActiveOfficer(prev => ({
+        ...prev,
+        id: userProfile.uid || prev.id,
+        nameAr: userProfile.nameAr || userProfile.displayName || prev.nameAr,
+        role: (userProfile.role as OfficerRole) || prev.role,
+        nationalId: userProfile.civilId || userProfile.nationalId || prev.nationalId,
+        civilId: userProfile.civilId || userProfile.nationalId,
+        workField: userProfile.workField || userProfile.unit || prev.workField,
+        unit: userProfile.unit || userProfile.workField || prev.unit,
+        mobile: userProfile.mobile || prev.mobile,
+        personalEmail: userProfile.email || prev.personalEmail,
+        permissions: { ...(prev.permissions || {}), ...(userProfile.permissions || {}) }
+      }));
+    }
+  }, [userProfile]);
   const [officers, setOfficers] = useState<OfficerUser[]>(() => {
     try {
       const cached = localStorage.getItem('officer_users_v4');

@@ -26,7 +26,7 @@ import {
   persistPrincipalSession,
   initSessionKeepAlive
 } from './utils/browserCredentialManager';
-import { Language, SurveyResponse, AppConfig, EmailLog, SystemIntegrationLog, PrincipalReport, SchoolItem, BeneficiaryFeedback, BeneficiaryInquiry } from './types';
+import { Language, SurveyResponse, AppConfig, EmailLog, SystemIntegrationLog, PrincipalReport, SchoolItem, BeneficiaryFeedback, BeneficiaryInquiry, UserProfile } from './types';
 import { sendOfficialEmail } from './utils/emailService';
 import { getSafeTranslation } from './utils/translationHelper';
 import {
@@ -47,6 +47,9 @@ import {
   fetchAllInquiriesFromCloud,
   fetchAllPrincipalReportsFromCloud
 } from './utils/cloudSync';
+import { auth, ensureAnonymousAuth, getUserRole, getUserProfile, logoutUser } from './firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import OfficerLoginModal from './components/OfficerLoginModal';
 import {
   INITIAL_CONFIG,
   INITIAL_SURVEYS,
@@ -87,35 +90,16 @@ export default function App() {
     }
   }, [theme]);
 
-  // Application views / tabs / roles: 'portal' (Unified Selection Portal), 'parent' (Beneficiary / Parent Survey Form), or 'admin' (Admission Officer / System Admin)
-  // Maintains login session across inactivity, page reload, and browser restarts
+  // الحالة الافتراضية دائماً البوابة الرئيسية ذات الـ 5 بطاقات (portal)
   const [userRole, setUserRoleState] = useState<'portal' | 'parent' | 'admin'>(() => {
-    if (typeof window !== 'undefined') {
-      if (window.location.search.includes('print-report=true')) {
-        return 'admin';
-      }
-      const officerSess = getPersistedOfficerSession();
-      if (officerSess.isAuthenticated) {
-        return 'admin';
-      }
+    if (typeof window !== 'undefined' && window.location.search.includes('print-report=true')) {
+      return 'admin';
     }
     return 'portal';
   });
 
-  // Portal view state & Modal state
-  const [portalView, setPortalViewState] = useState<'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard' | 'admin-login'>(() => {
-    if (typeof window !== 'undefined') {
-      const persistedPrincipal = getPersistedPrincipalSession();
-      if (persistedPrincipal) {
-        return 'principal-dashboard';
-      }
-      const savedView = localStorage.getItem('portal_view_v1');
-      if (savedView === 'parent-choices' || savedView === 'parent-track') {
-        return savedView;
-      }
-    }
-    return 'selection';
-  });
+  // الحالة الافتراضية للبوابة تعرض البطاقات الخمس الرسمية (selection)
+  const [portalView, setPortalViewState] = useState<'selection' | 'parent-choices' | 'parent-track' | 'principal-login' | 'principal-dashboard' | 'admin-login'>('selection');
 
   const [showAgeModal, setShowAgeModalState] = useState<boolean>(false);
 
@@ -128,6 +112,45 @@ export default function App() {
   } | null>(() => {
     return getPersistedPrincipalSession();
   });
+
+  // Real Verified Firebase Auth Role ('admin' | 'officer') & Profile with permissions
+  const [verifiedAuthRole, setVerifiedAuthRole] = useState<'admin' | 'officer' | null>(null);
+  const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
+  const [isOfficerLoginOpen, setIsOfficerLoginOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (user && !user.isAnonymous) {
+        // Read full profile with role and permissions from Firestore
+        const profile = await getUserProfile(user.uid);
+        if (profile) {
+          setCurrentUserProfile(profile);
+          const role = profile.role === 'admin' ? 'admin' : 'officer';
+          setVerifiedAuthRole(role);
+        } else {
+          const role = await getUserRole(user.uid);
+          if (role === 'admin' || role === 'officer') {
+            setVerifiedAuthRole(role);
+          }
+        }
+      } else {
+        try {
+          const savedSession = sessionStorage.getItem('verified_officer_profile_v1');
+          if (savedSession) {
+            const parsed = JSON.parse(savedSession);
+            if (parsed?.role === 'admin' || parsed?.role === 'officer') {
+              setVerifiedAuthRole(parsed.role);
+              if (parsed.profile) setCurrentUserProfile(parsed.profile);
+              return;
+            }
+          }
+        } catch {}
+        setVerifiedAuthRole(null);
+        setCurrentUserProfile(null);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // Session Activity Keep-Alive: keeps user continuously logged in during inactivity
   useEffect(() => {
@@ -168,7 +191,11 @@ export default function App() {
 
   const setUserRole = (role: 'portal' | 'parent' | 'admin', officerId?: string) => {
     if (role === 'admin') {
-      const activeId = officerId || (typeof window !== 'undefined' ? localStorage.getItem('active_officer_id_v1') : null) || 'emp_1';
+      if (!verifiedAuthRole) {
+        setIsOfficerLoginOpen(true);
+        return;
+      }
+      const activeId = officerId || auth.currentUser?.uid || 'emp_1';
       persistOfficerSession(activeId);
     }
     pushNavState(role, role === 'portal' ? 'selection' : portalView, false);
@@ -182,9 +209,15 @@ export default function App() {
     }
   };
 
-  // Explicit Officer Logout (only logged out when user explicitly clicks logout)
-  const handleAdminLogout = () => {
+  // Explicit Officer Logout with Firebase Auth Sign-Out
+  const handleAdminLogout = async () => {
+    await logoutUser();
     clearOfficerSession();
+    try {
+      sessionStorage.removeItem('verified_officer_profile_v1');
+    } catch {}
+    setVerifiedAuthRole(null);
+    setCurrentUserProfile(null);
     historyStackRef.current = [];
     setUserRoleState('portal');
     setPortalViewState('selection');
@@ -212,19 +245,20 @@ export default function App() {
       setShowAgeModalState(false);
       return;
     }
+    if (isOfficerLoginOpen) {
+      setIsOfficerLoginOpen(false);
+      return;
+    }
     if (historyStackRef.current.length > 0) {
       const previous = historyStackRef.current.pop()!;
       setUserRoleState(previous.userRole);
       setPortalViewState(previous.portalView);
       setShowAgeModalState(previous.showAgeModal);
     } else {
-      // Fallback if stack is empty
-      if (userRole === 'parent' || userRole === 'admin') {
-        setUserRoleState('portal');
-        setPortalViewState('parent-choices');
-      } else if (portalView !== 'selection') {
-        setPortalViewState('selection');
-      }
+      // يعيد المستخدم دائماً إلى شاشة الـ 5 بطاقات الرسمية
+      setUserRoleState('portal');
+      setPortalViewState('selection');
+      setShowAgeModalState(false);
     }
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, behavior: 'instant' });
@@ -233,6 +267,7 @@ export default function App() {
 
   const handleReturnToMainGateway = () => {
     historyStackRef.current = [];
+    setIsOfficerLoginOpen(false);
     setUserRoleState('portal');
     setPortalViewState('selection');
     setShowAgeModalState(false);
@@ -370,7 +405,8 @@ export default function App() {
   const handleAddInquiry = (newInq: Omit<BeneficiaryInquiry, 'id' | 'createdAt' | 'status'>) => {
     const item: BeneficiaryInquiry = {
       ...newInq,
-      id: `inq-${Date.now()}`,
+      id: `INQ-${crypto.randomUUID()}`,
+      beneficiaryUid: auth.currentUser?.uid,
       createdAt: new Date().toISOString(),
       status: 'new'
     };
@@ -381,7 +417,7 @@ export default function App() {
       return next;
     });
 
-    // Immediate dispatch to server without any delay
+    // Immediate direct cloud dispatch
     submitInquiryRealtime(item).catch(() => {});
 
     setAlertToast({ message: 'تم إرسال استفسارك بنجاح وفوراً لمسؤولي القبول!', type: 'success' });
@@ -472,6 +508,8 @@ export default function App() {
   const [batchDetails, setBatchDetails] = useState<string>('');
 
   useEffect(() => {
+    ensureAnonymousAuth().catch(() => {});
+
     Promise.all([
       loadSurveysFromStorage(),
       loadPrincipalReportsFromStorage(),
@@ -644,12 +682,13 @@ export default function App() {
   }, [inquiries, config, isInitialLoaded]);
 
   const handleAddSurvey = (newSurveyData: Omit<SurveyResponse, 'id' | 'createdAt' | 'isSynced'>): SurveyResponse => {
-    const surveyId = `SURV-${Math.floor(100 + Math.random() * 900)}`;
+    const surveyId = `SURV-${crypto.randomUUID()}`;
     const nowStr = new Date().toISOString();
 
     const newResponse: SurveyResponse = {
       ...newSurveyData,
       id: surveyId,
+      beneficiaryUid: auth.currentUser?.uid,
       createdAt: nowStr,
       lastUpdatedAt: nowStr,
       isSynced: isOnline
@@ -661,7 +700,7 @@ export default function App() {
       return next;
     });
 
-    // Immediate dispatch to server without any delay
+    // Immediate direct cloud dispatch
     submitSurveyRealtime(newResponse).catch(() => {});
 
     const ratedStaff = newResponse.staffSatisfaction && newResponse.staffSatisfaction > 0;
@@ -841,32 +880,7 @@ export default function App() {
         )}
 
         <div className="flex-1 flex flex-col relative">
-          {userRole === 'portal' ? (
-            <div key="portal-view" className="animate-fade-in flex-1 flex flex-col h-full">
-              <ErrorBoundary fallbackTitleAr="خطأ في تحميل البوابة الموحدة">
-                <Portal
-                  currentLang={currentLang}
-                  surveys={surveys}
-                  schools={schoolsList}
-                  onToggleResolved={handleToggleResolved}
-                  onUpdateSurvey={handleUpdateSurvey}
-                  config={config}
-                  onSelectRole={setUserRole}
-                  principalReports={principalReports}
-                  onAddPrincipalReport={handleAddPrincipalReport}
-                  onToggleReportResolved={handleToggleReportResolved}
-                  theme={theme}
-                  portalView={portalView}
-                  onPortalViewChange={handlePortalViewChange}
-                  showAgeModal={showAgeModal}
-                  onAgeModalChange={handleAgeModalChange}
-                  principalSession={principalSession}
-                  onPrincipalSessionChange={handlePrincipalSessionChange}
-                  onOpenInquiries={() => setIsInquiriesModalOpen(true)}
-                />
-              </ErrorBoundary>
-            </div>
-          ) : userRole === 'parent' ? (
+          {userRole === 'parent' ? (
             <div key="survey-view" className="animate-fade-in p-4 max-w-4xl mx-auto w-full">
               <ErrorBoundary fallbackTitleAr="خطأ في تحميل نموذج الطلب">
                 <SurveyForm
@@ -876,12 +890,15 @@ export default function App() {
                   onUpdateSurvey={handleUpdateSurvey}
                   config={config}
                   isOnline={isOnline}
-                  onBackToPortal={() => setUserRole('portal')}
+                  onBackToPortal={() => {
+                    setUserRoleState('portal');
+                    setPortalViewState('selection');
+                  }}
                   theme={theme}
                 />
               </ErrorBoundary>
             </div>
-          ) : (
+          ) : userRole === 'admin' && verifiedAuthRole ? (
             <div key="dashboard-view" className="animate-fade-in flex-1">
               <ErrorBoundary fallbackTitleAr="خطأ في تحميل لوحة تحكم المسؤول">
                 <Suspense fallback={<div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="w-12 h-12 text-teal-600 animate-spin" /></div>}>
@@ -905,7 +922,10 @@ export default function App() {
                     onSyncNow={handleSyncNow}
                     unsyncedCount={unsyncedCount}
                     isOnline={isOnline}
-                    onBackToPortal={() => setUserRole('portal')}
+                    onBackToPortal={() => {
+                      setUserRoleState('portal');
+                      setPortalViewState('selection');
+                    }}
                     principalReports={principalReports}
                     onToggleReportResolved={handleToggleReportResolved}
                     onUpdateReportStatus={handleUpdateReportStatus}
@@ -922,8 +942,34 @@ export default function App() {
                     onUpdateBeneficiaryFeedbacks={setBeneficiaryFeedbacks}
                     inquiries={inquiries}
                     onUpdateInquiries={setInquiries}
+                    userProfile={currentUserProfile}
                   />
                 </Suspense>
+              </ErrorBoundary>
+            </div>
+          ) : (
+            <div key="portal-view" className="animate-fade-in flex-1 flex flex-col h-full">
+              <ErrorBoundary fallbackTitleAr="خطأ في تحميل البوابة الموحدة">
+                <Portal
+                  currentLang={currentLang}
+                  surveys={surveys}
+                  schools={schoolsList}
+                  onToggleResolved={handleToggleResolved}
+                  onUpdateSurvey={handleUpdateSurvey}
+                  config={config}
+                  onSelectRole={setUserRole}
+                  principalReports={principalReports}
+                  onAddPrincipalReport={handleAddPrincipalReport}
+                  onToggleReportResolved={handleToggleReportResolved}
+                  theme={theme}
+                  portalView={portalView}
+                  onPortalViewChange={handlePortalViewChange}
+                  showAgeModal={showAgeModal}
+                  onAgeModalChange={handleAgeModalChange}
+                  principalSession={principalSession}
+                  onPrincipalSessionChange={handlePrincipalSessionChange}
+                  onOpenInquiries={() => setIsInquiriesModalOpen(true)}
+                />
               </ErrorBoundary>
             </div>
           )}
@@ -1021,6 +1067,18 @@ export default function App() {
         onRateInquiry={handleRateInquiry}
         isDark={isDark}
         isRtl={currentLang === 'ar'}
+      />
+
+      {/* Real Firebase Auth Officer Login Modal */}
+      <OfficerLoginModal
+        isOpen={isOfficerLoginOpen}
+        onClose={() => setIsOfficerLoginOpen(false)}
+        onLoginSuccess={(role, email, profile) => {
+          setVerifiedAuthRole(role);
+          if (profile) setCurrentUserProfile(profile);
+          setUserRoleState('admin');
+          setAlertToast({ message: `تم تسجيل الدخول بنجاح بصلاحية: ${role === 'admin' ? 'مدير نظام' : 'مسؤول قبول'}`, type: 'success' });
+        }}
       />
       
       {/* شريط الأزرار والتنقل المتجاوب - تم تصميمه ليناسب الجوال وشاشات الكمبيوتر دون أن يحجب المحتوى */}

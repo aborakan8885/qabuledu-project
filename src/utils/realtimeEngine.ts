@@ -90,12 +90,12 @@ export function broadcastLocalEvent(type: string, data: any) {
 // =========================================================================
 
 /**
- * Submit inquiry instantly to cloud Firestore and local server
+ * Submit inquiry instantly to cloud Firestore with direct authentication
  */
 export async function submitInquiryRealtime(
   inquiryData: Omit<BeneficiaryInquiry, 'id' | 'createdAt' | 'status'> & { id?: string }
 ): Promise<BeneficiaryInquiry> {
-  const localId = inquiryData.id || `inq-${Date.now()}`;
+  const localId = inquiryData.id || `INQ-${crypto.randomUUID()}`;
   const nowStr = new Date().toISOString();
   const fallbackInquiry: BeneficiaryInquiry = {
     ...inquiryData,
@@ -104,124 +104,44 @@ export async function submitInquiryRealtime(
     status: 'new'
   };
 
-  // 1. Instant Cloud Firestore save (guarantees cross-device arrival across all deployed instances)
-  saveInquiryToCloud(fallbackInquiry).catch((err) => {
-    console.warn('Direct Firestore saveInquiry error:', err);
-  });
+  // Instant Cloud Firestore save with automatic anonymous auth
+  await saveInquiryToCloud(fallbackInquiry);
 
-  // 2. Local Tab Broadcast
+  // Local Tab Broadcast for active screens
   broadcastLocalEvent('NEW_INQUIRY', fallbackInquiry);
-
-  // 3. Server HTTP API Dispatch
-  try {
-    const res = await fetch('/api/inquiries', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(fallbackInquiry)
-    });
-
-    if (res.ok) {
-      const json = await res.json();
-      if (json && json.inquiry) {
-        return json.inquiry;
-      }
-    }
-  } catch (err) {
-    console.warn('Real-time API inquiry submission fallback to cloud/local:', err);
-  }
 
   return fallbackInquiry;
 }
 
 /**
- * Update inquiry in cloud Firestore and server immediately (claim, unclaim, reply, rating)
+ * Update inquiry in cloud Firestore immediately (claim, unclaim, reply, rating)
  */
 export async function updateInquiryRealtime(
   inquiryId: string,
   updates: Partial<BeneficiaryInquiry>
 ): Promise<boolean> {
-  // 1. Cloud Firestore Update
-  updateInquiryInCloud(inquiryId, updates).catch((err) => {
-    console.warn('Direct Firestore updateInquiry error:', err);
-  });
-
-  // 2. Local Tab Broadcast
   broadcastLocalEvent('UPDATE_INQUIRY', { ...updates, id: inquiryId });
-
-  // 3. Server HTTP API Dispatch
-  try {
-    const res = await fetch(`/api/inquiries/${inquiryId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates)
-    });
-    return res.ok;
-  } catch (err) {
-    console.warn('Real-time API inquiry update fallback to cloud:', err);
-    return false;
-  }
+  return updateInquiryInCloud(inquiryId, updates);
 }
 
 /**
- * Submit survey/request instantly to cloud Firestore and server
+ * Submit survey/request instantly to cloud Firestore
  */
 export async function submitSurveyRealtime(survey: SurveyResponse): Promise<SurveyResponse> {
-  // 1. Cloud Firestore Save
-  saveSurveyToCloud(survey).catch((err) => {
-    console.warn('Direct Firestore saveSurvey error:', err);
-  });
-
-  // 2. Local Tab Broadcast
+  await saveSurveyToCloud(survey);
   broadcastLocalEvent('NEW_SURVEY', survey);
-
-  // 3. Server HTTP API Dispatch
-  try {
-    const res = await fetch('/api/surveys', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(survey)
-    });
-
-    if (res.ok) {
-      const json = await res.json();
-      if (json && json.survey) {
-        return json.survey;
-      }
-    }
-  } catch (err) {
-    console.warn('Real-time API survey submission fallback to cloud:', err);
-  }
-
   return survey;
 }
 
 /**
- * Update survey in cloud Firestore and server immediately (status, assign, resolve)
+ * Update survey in cloud Firestore immediately (status, assign, resolve)
  */
 export async function updateSurveyRealtime(
   surveyId: string,
   updates: Partial<SurveyResponse>
 ): Promise<boolean> {
-  // 1. Cloud Firestore Update
-  updateSurveyInCloud(surveyId, updates).catch((err) => {
-    console.warn('Direct Firestore updateSurvey error:', err);
-  });
-
-  // 2. Local Tab Broadcast
   broadcastLocalEvent('UPDATE_SURVEY', { ...updates, id: surveyId });
-
-  // 3. Server HTTP API Dispatch
-  try {
-    const res = await fetch(`/api/surveys/${surveyId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates)
-    });
-    return res.ok;
-  } catch (err) {
-    console.warn('Real-time API survey update fallback to cloud:', err);
-    return false;
-  }
+  return updateSurveyInCloud(surveyId, updates);
 }
 
 // =========================================================================
