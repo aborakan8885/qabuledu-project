@@ -147,6 +147,28 @@ export default function Portal({
   const [showProtectedPasscode, setShowProtectedPasscode] = useState<boolean>(false);
 
   const handleOpenProtectedCard = (target: 'map' | 'parent' | 'principal') => {
+    setProtectedModalTarget(target);
+    setProtectedPasscode('');
+    setProtectedPasscodeError('');
+    setShowProtectedPasscode(false);
+  };
+
+  const handleVerifyProtectedPasscode = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (protectedPasscode.trim() !== 'salim1392') {
+      setProtectedPasscodeError(
+        isRtl
+          ? 'عفواً، الرقم السري غير صحيح! لا يمكن الدخول إلا بالرقم السري المعتمد.'
+          : 'Incorrect passcode! Access is restricted.'
+      );
+      return;
+    }
+
+    const target = protectedModalTarget;
+    setProtectedModalTarget(null);
+    setProtectedPasscode('');
+    setProtectedPasscodeError('');
+
     if (target === 'map') {
       window.open('https://mapedumadinah.com/', '_blank', 'noopener,noreferrer');
     } else if (target === 'parent') {
@@ -160,10 +182,6 @@ export default function Portal({
         setLoginError('');
       }
     }
-  };
-
-  const handleVerifyProtectedPasscode = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
   };
 
   // Helper for safe translation
